@@ -166,13 +166,21 @@ def _do_start(config: Config) -> None:
         console.print(f"[yellow]Server already running (PID {pid}).[/yellow]")
         return
 
-    # Spawn a detached child process that runs the server loop
+    # Spawn a detached child process that runs the server loop.
     python = sys.executable
+    if sys.platform == "win32" and python.lower().endswith("python.exe"):
+        pythonw = str(Path(python).with_name("pythonw.exe"))
+        if Path(pythonw).exists():
+            python = pythonw
     script = str(Path(__file__).parent / "_server_process.py")
     if sys.platform == "win32":
         proc = subprocess.Popen(
             [python, script],
-            creationflags=subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP,
+            creationflags=(
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_NO_WINDOW
+            ),
             close_fds=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
