@@ -1,0 +1,70 @@
+"""FastAPI HTTP server for phbcli.
+
+Runs concurrently with the WS client inside the same asyncio event loop.
+Endpoint:
+  GET /status  — returns server and WS connection status as JSON
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.responses import JSONResponse
+
+from .config import Config, load_state
+from .process import is_running, read_pid
+
+logger = logging.getLogger(__name__)
+
+app = FastAPI(title="phbcli", version="0.1.0", docs_url=None, redoc_url=None)
+
+
+@app.get("/status")
+async def get_status() -> JSONResponse:
+    state = load_state()
+    pid = read_pid()
+    return JSONResponse(
+        {
+            "running": is_running(pid),
+            "pid": pid,
+            "ws_connected": state.ws_connected,
+            "last_connected": state.last_connected,
+            "gateway_url": state.gateway_url,
+        }
+    )
+
+
+async def run_http_server(config: Config, stop_event: asyncio.Event) -> None:
+    """Start uvicorn and shut it down when stop_event is set."""
+    uv_config = uvicorn.Config(
+        app=app,
+        host=config.http_host,
+        port=config.http_port,
+        log_level="warning",
+        loop="none",  # use the existing event loop
+    )
+    server = uvicorn.Server(uv_config)
+
+    serve_task = asyncio.create_task(server.serve())
+    stop_task = asyncio.create_task(stop_event.wait())
+
+    done, pending = await asyncio.wait(
+        [serve_task, stop_task],
+        return_when=asyncio.FIRST_COMPLETED,
+    )
+
+    if stop_task in done:
+        server.should_exit = True
+        await serve_task
+
+    for task in pending:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+    logger.info("HTTP server stopped.")
