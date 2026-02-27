@@ -26,6 +26,7 @@ class Config(BaseModel):
     gateway_url: str = "ws://localhost:8765"
     http_host: str = "127.0.0.1"
     http_port: int = 18080
+    plugin_port: int = 18081  # local WS port for channel plugin subprocesses
 
 
 class State(BaseModel):

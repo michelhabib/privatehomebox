@@ -1,0 +1,347 @@
+# Channel Plugin Development Guide
+
+This guide explains how to write, install, and configure a new PHB channel plugin.
+A plugin connects a third-party messaging platform (Telegram, WhatsApp, your mobile
+app, or anything else) to the Private Home Box server.
+
+For the architectural background — subprocess model, JSON-RPC protocol, message flow
+diagrams — see [channel-plugin-architecture.md](channel-plugin-architecture.md).
+
+---
+
+## Prerequisites
+
+- phbcli set up and running (`phbcli setup`, `phbcli start`)
+- uv installed — [docs.astral.sh/uv](https://docs.astral.sh/uv)
+- Python ≥ 3.11
+
+---
+
+## Quick start — clone the echo plugin
+
+The fastest way to start is to copy the reference implementation:
+
+```
+phbserver/
+└── channels/
+    └── phb-channel-echo/        ← copy this entire directory
+```
+
+Rename it `phb-channel-<yourname>/` and follow the steps below.
+
+---
+
+## 1. Package structure
+
+```
+phbserver/channels/phb-channel-telegram/
+├── pyproject.toml
+└── src/
+    └── phb_channel_telegram/
+        ├── __init__.py
+        ├── plugin.py       ← your ChannelPlugin subclass
+        └── main.py         ← CLI entry point
+```
+
+---
+
+## 2. `pyproject.toml`
+
+```toml
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "phb-channel-telegram"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "phb-channel-sdk",
+    "python-telegram-bot>=21",   # or whatever the third-party SDK is
+    "typer>=0.12",
+]
+
+[project.scripts]
+phb-channel-telegram = "phb_channel_telegram.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/phb_channel_telegram"]
+
+[tool.uv.sources]
+phb-channel-sdk = { workspace = true }
+```
+
+> **`[tool.uv.sources]`** is required for uv to resolve `phb-channel-sdk`
+> from the local workspace instead of PyPI.
+
+---
+
+## 3. Implement `ChannelPlugin`
+
+Open `plugin.py` and subclass `phb_channel_sdk.ChannelPlugin`:
+
+```python
+from __future__ import annotations
+
+import asyncio
+import logging
+from typing import Any
+
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters
+
+from phb_channel_sdk import ChannelPlugin, ChannelInfo, UnifiedMessage
+
+logger = logging.getLogger(__name__)
+
+
+class TelegramChannel(ChannelPlugin):
+
+    @property
+    def info(self) -> ChannelInfo:
+        return ChannelInfo(
+            name="telegram",
+            version="0.1.0",
+            description="Telegram Bot channel via python-telegram-bot.",
+        )
+
+    async def on_configure(self, config: dict[str, Any]) -> None:
+        """Receive credentials pushed by phbcli on connect."""
+        self._bot_token = config["bot_token"]
+
+    async def on_start(self) -> None:
+        """Start the Telegram bot polling loop."""
+        self._app = (
+            Application.builder()
+            .token(self._bot_token)
+            .build()
+        )
+
+        async def _handle(update: Update, context) -> None:
+            msg = update.message
+            if not msg or not msg.text:
+                return
+            unified = UnifiedMessage(
+                channel="telegram",
+                direction="inbound",
+                sender_id=str(msg.from_user.id),
+                body=msg.text,
+                metadata={
+                    "chat_id": msg.chat.id,
+                    "message_id": msg.message_id,
+                    "username": msg.from_user.username,
+                },
+            )
+            await self.emit(unified)  # ← forwards to phbcli
+
+        self._app.add_handler(MessageHandler(filters.TEXT, _handle))
+        asyncio.create_task(self._app.run_polling())
+        logger.info("Telegram bot started.")
+
+    async def on_stop(self) -> None:
+        """Shut down the bot."""
+        if self._app:
+            await self._app.stop()
+        logger.info("Telegram bot stopped.")
+
+    async def send(self, message: UnifiedMessage) -> None:
+        """Send an outbound message to Telegram."""
+        chat_id = message.metadata.get("chat_id") or message.recipient_id
+        if not chat_id:
+            logger.warning("No chat_id for outbound Telegram message.")
+            return
+        await self._app.bot.send_message(chat_id=chat_id, text=message.body)
+```
+
+### Methods you must implement
+
+| Method | Called when | What to do |
+|---|---|---|
+| `info` (property) | registration | Return `ChannelInfo(name=..., version=..., description=...)` |
+| `on_configure(config)` | phbcli pushes credentials | Store API keys, tokens, etc. |
+| `on_start()` | plugin connects to phbcli | Start polling / set up webhooks |
+| `on_stop()` | phbcli sends stop signal | Cancel tasks, close connections |
+| `send(message)` | phbcli wants to send a message | Translate `UnifiedMessage` → third-party API call |
+
+### The `emit` method
+
+`await self.emit(unified_message)` is inherited — call it whenever an inbound
+message arrives from the third party. The transport layer forwards it to phbcli
+as a `channel.receive` JSON-RPC notification automatically.
+
+---
+
+## 4. Write `main.py`
+
+```python
+import asyncio
+import logging
+import sys
+
+import typer
+from phb_channel_sdk import PluginTransport
+from .plugin import TelegramChannel
+
+app = typer.Typer(name="phb-channel-telegram", add_completion=False)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(sys.stdout)],
+)
+
+
+@app.command()
+def run(
+    phb_ws: str = typer.Option(
+        "ws://127.0.0.1:18081",
+        "--phb-ws",
+        envvar="PHB_WS",
+        help="WebSocket URL of phbcli's plugin server.",
+    ),
+) -> None:
+    """Connect to phbcli and start the Telegram channel."""
+    plugin = TelegramChannel()
+    transport = PluginTransport(plugin, phb_ws)
+    asyncio.run(transport.run())
+
+
+if __name__ == "__main__":
+    app()
+```
+
+The `--phb-ws` argument is automatically appended by `PluginManager` when
+spawning the subprocess. The `envvar="PHB_WS"` allows overriding it in
+development without CLI args.
+
+---
+
+## 5. Install and configure
+
+### Option A — development (workspace member)
+
+Add the channel to the uv workspace and install it in-place:
+
+```bash
+# The workspace root already has channels/* as a member, so just sync:
+cd phbserver
+uv sync
+
+# Register with phbcli:
+phbcli channel setup telegram
+# Prompts: "Command to start the 'telegram' plugin" → phb-channel-telegram
+```
+
+### Option B — published package
+
+```bash
+phbcli channel install telegram
+# Runs: uv tool install phb-channel-telegram
+
+phbcli channel setup telegram
+```
+
+### Store credentials
+
+Edit `~/.phbcli/channels/telegram.json` and add your credentials to the `config` field:
+
+```json
+{
+  "name": "telegram",
+  "enabled": true,
+  "command": ["phb-channel-telegram"],
+  "config": {
+    "bot_token": "123456:ABC-DEF..."
+  }
+}
+```
+
+phbcli pushes this `config` dict to your plugin via `on_configure()` automatically
+each time the plugin connects.
+
+---
+
+## 6. Run and verify
+
+```bash
+# Restart the server so PluginManager spawns your new channel:
+phbcli stop
+phbcli start
+
+# Check that it connected:
+phbcli channel status
+```
+
+Expected output:
+
+```
+         Connected channels
+ Name      Version  Description
+ telegram  0.1.0    Telegram Bot channel…
+```
+
+---
+
+## 7. Sending events and metadata back to phbcli
+
+Beyond inbound messages you can emit structured events using `channel.event`.
+Call this from your plugin via the transport directly when you need to report
+delivery receipts, errors, or status changes:
+
+```python
+# From inside your plugin — requires accessing self._emit_callback pattern.
+# For status/error events, log them; full event emission is roadmap.
+logger.warning("Delivery failed for message %s", message.id)
+```
+
+Full `channel.event` support (arbitrary structured events passed upstream to
+phbcli handlers) is on the roadmap.
+
+---
+
+## 8. Reference — `UnifiedMessage` fields
+
+| Field | Type | Required | Notes |
+|---|---|---|---|
+| `id` | `str` | auto | UUID hex, auto-generated |
+| `channel` | `str` | yes | Plugin name, e.g. `"telegram"` |
+| `direction` | `str` | yes | `"inbound"` or `"outbound"` |
+| `sender_id` | `str` | yes | Channel-native user identifier |
+| `recipient_id` | `str \| None` | no | Channel-native target identifier |
+| `content_type` | `str` | default `"text"` | `"text"` \| `"image"` \| `"audio"` \| `"video"` \| `"location"` \| `"command"` \| `"file"` |
+| `body` | `str` | default `""` | Text content or caption |
+| `metadata` | `dict` | default `{}` | Channel-specific extras — free-form |
+| `timestamp` | `datetime` | auto | UTC, auto-generated |
+
+---
+
+## 9. CLI reference — `phbcli channel`
+
+| Command | Description |
+|---|---|
+| `phbcli channel list` | List all configured plugins and their status |
+| `phbcli channel install <name>` | Install via `uv tool install phb-channel-<name>` |
+| `phbcli channel setup <name>` | Configure command and credentials interactively |
+| `phbcli channel enable <name>` | Enable a disabled plugin |
+| `phbcli channel disable <name>` | Disable without removing config |
+| `phbcli channel remove <name>` | Delete the plugin's config file |
+| `phbcli channel status` | Show currently connected plugins (live query) |
+
+---
+
+## 10. Tips
+
+**Plugin not connecting?**
+- Check the subprocess is running: `phbcli status`
+- Check the plugin logs (stdout/stderr of the subprocess)
+- Verify the command in `~/.phbcli/channels/<name>.json` is on `PATH`
+- Try running the plugin manually: `phb-channel-telegram --phb-ws ws://127.0.0.1:18081`
+
+**Credentials not reaching `on_configure`?**
+- Make sure the `config` key in the JSON file is populated (not `{}`)
+- Config is pushed immediately after `channel.register` — check your logs
+
+**Testing without a real third-party account?**
+- Use the echo channel: `phbcli channel setup echo` — it reflects any outbound
+  message back as inbound, letting you verify the full round-trip pipeline.

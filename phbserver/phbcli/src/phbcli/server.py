@@ -1,14 +1,16 @@
 """FastAPI HTTP server for phbcli.
 
 Runs concurrently with the WS client inside the same asyncio event loop.
-Endpoint:
-  GET /status  — returns server and WS connection status as JSON
+Endpoints:
+  GET /status   — server and WS connection status
+  GET /channels — connected channel plugin names and info
 """
 
 from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Callable
 
 import uvicorn
 from fastapi import FastAPI
@@ -20,6 +22,15 @@ from .process import is_running, read_pid
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="phbcli", version="0.1.0", docs_url=None, redoc_url=None)
+
+# Injected by _server_process.py after PluginManager is created.
+_get_channel_info: Callable[[], list[dict[str, str]]] | None = None
+
+
+def set_channel_info_provider(fn: Callable[[], list[dict[str, str]]]) -> None:
+    """Register a callback that returns info about connected channel plugins."""
+    global _get_channel_info
+    _get_channel_info = fn
 
 
 @app.get("/status")
@@ -35,6 +46,12 @@ async def get_status() -> JSONResponse:
             "gateway_url": state.gateway_url,
         }
     )
+
+
+@app.get("/channels")
+async def get_channels() -> JSONResponse:
+    channels = _get_channel_info() if _get_channel_info else []
+    return JSONResponse({"channels": channels})
 
 
 async def run_http_server(config: Config, stop_event: asyncio.Event) -> None:
