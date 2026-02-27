@@ -49,10 +49,12 @@ class PluginManager:
         config: Config,
         stop_event: asyncio.Event,
         on_message: Callable[[dict[str, Any]], Awaitable[None]] | None = None,
+        on_event: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None,
     ) -> None:
         self._config = config
         self._stop_event = stop_event
         self._on_message = on_message
+        self._on_event = on_event
         self._channels: dict[str, _ConnectedChannel] = {}
         self._subprocesses: list[subprocess.Popen[bytes]] = []
         self._host = "127.0.0.1"
@@ -193,12 +195,23 @@ class PluginManager:
                                 )
 
                     case "channel.event":
+                        event_name = params.get("event")
+                        event_data = params.get("data", {})
                         logger.info(
                             "[%s] event=%s data=%s",
                             channel_name or "?",
-                            params.get("event"),
-                            params.get("data"),
+                            event_name,
+                            event_data,
                         )
+                        if self._on_event and isinstance(event_name, str):
+                            try:
+                                await self._on_event(event_name, event_data)
+                            except Exception as exc:
+                                logger.exception(
+                                    "on_event handler error for '%s': %s",
+                                    channel_name or "?",
+                                    exc,
+                                )
 
                     case _:
                         logger.warning(
@@ -246,8 +259,15 @@ class PluginManager:
         from .channel_config import load_channel_config
 
         cfg = load_channel_config(channel_name)
-        if cfg and cfg.config:
-            await self.configure_channel(channel_name, cfg.config)
+        payload = dict(cfg.config) if cfg else {}
+        if channel_name == "devices":
+            # Devices channel is mandatory and receives runtime gateway settings
+            # from the core config to avoid stale values in channel JSON.
+            payload.setdefault("gateway_url", self._config.gateway_url)
+            payload.setdefault("device_id", self._config.device_id)
+            payload.setdefault("ping_interval", 30)
+        if payload:
+            await self.configure_channel(channel_name, payload)
 
     # ------------------------------------------------------------------
     # Outbound API (phbcli → plugin)
@@ -284,6 +304,23 @@ class PluginManager:
             return
         await ch.ws.send(
             rpc.build_notification("channel.configure", {"config": config})
+        )
+
+    async def send_event_to_channel(
+        self, channel_name: str, event: str, data: dict[str, Any]
+    ) -> None:
+        """Send an event notification to a specific plugin."""
+        ch = self._channels.get(channel_name)
+        if ch is None:
+            logger.warning(
+                "Cannot send event to channel '%s': not connected.", channel_name
+            )
+            return
+        await ch.ws.send(
+            rpc.build_notification(
+                "channel.event",
+                {"event": event, "data": data},
+            )
         )
 
     async def probe_channel(self, channel_name: str) -> dict[str, Any] | None:

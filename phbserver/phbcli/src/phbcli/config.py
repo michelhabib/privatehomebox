@@ -27,6 +27,10 @@ class Config(BaseModel):
     http_host: str = "127.0.0.1"
     http_port: int = 18080
     plugin_port: int = 18081  # local WS port for channel plugin subprocesses
+    master_key_file: str = "master_key.pem"
+    pairing_code_length: int = 6
+    pairing_code_ttl_seconds: int = 300
+    attestation_expires_days: int = 30
 
 
 class State(BaseModel):
@@ -83,3 +87,7 @@ def mark_disconnected() -> None:
     state = load_state()
     state.ws_connected = False
     save_state(state)
+
+
+def master_key_path(config: Config) -> Path:
+    return APP_DIR / config.master_key_file

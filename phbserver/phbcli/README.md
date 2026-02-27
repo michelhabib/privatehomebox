@@ -30,6 +30,11 @@ phbcli stop
 # Check status
 phbcli status
 
+# Device pairing helpers
+phbcli device add
+phbcli device list
+phbcli device revoke <device_id>
+
 # Cleanup auto-start and running process
 phbcli teardown
 
@@ -45,6 +50,9 @@ phbcli uninstall
 | `start` | Start the background server (FastAPI HTTP + WS client). |
 | `stop`  | Stop the running server. |
 | `status`| Show whether the server is running, WebSocket connection state, last connection time, and gateway URL. |
+| `device add` | Generate a short-lived numeric pairing code for onboarding a mobile device. |
+| `device list` | List approved paired devices. |
+| `device revoke <id>` | Revoke an approved device by device_id. |
 | `teardown`| Stop the server and remove auto-start entries (Task Scheduler + Registry). Optional: `--purge` to remove `~/.phbcli/`; `--elevated-task` for elevated task removal. |
 | `uninstall`| Runs teardown, then prints package uninstall command (`uv tool uninstall phbcli` or `pip uninstall phbcli`). |
 
@@ -62,6 +70,9 @@ All runtime data is stored in `~/.phbcli/`:
 - `config.json` — device ID and gateway URL
 - `state.json` — live WebSocket connection state (updated by the running server)
 - `phbcli.pid` — PID of the running server process
+- `master_key.pem` — desktop Ed25519 master key used for gateway authentication
+- `pairing_session.json` — current active pairing code and expiry
+- `devices.json` — approved paired devices
 
 ## HTTP API
 

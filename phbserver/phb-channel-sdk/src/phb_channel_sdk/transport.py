@@ -44,6 +44,7 @@ class PluginTransport:
         self._ws: Any = None  # websockets connection
         self._pending: dict[str, asyncio.Future[Any]] = {}
         self._stop_event = asyncio.Event()
+        self._started = False
 
     async def run(self) -> None:
         """Connect to phbcli, register, and run the message loop.
@@ -108,16 +109,19 @@ class PluginTransport:
                 await self._notify("channel.receive", msg.model_dump(mode="json"))
 
             self._plugin._emit_callback = _forward_inbound
+            self._plugin._event_callback = self._notify_event
 
-            await self._plugin.on_start()
             try:
                 async for raw in ws:
                     await self._handle_frame(str(raw))
             except ConnectionClosed:
                 pass
             finally:
-                await self._plugin.on_stop()
+                if self._started:
+                    await self._plugin.on_stop()
+                    self._started = False
                 self._plugin._emit_callback = None
+                self._plugin._event_callback = None
                 self._ws = None
 
     # ------------------------------------------------------------------
@@ -156,6 +160,19 @@ class PluginTransport:
 
                 case "channel.configure":
                     await self._plugin.on_configure(req.params.get("config", {}))
+                    if not self._started:
+                        await self._plugin.on_start()
+                        self._started = True
+                    result = {"ok": True}
+
+                case "channel.event":
+                    event = req.params.get("event")
+                    data = req.params.get("data", {})
+                    if not isinstance(event, str) or not event:
+                        raise ValueError("channel.event requires params.event")
+                    if not isinstance(data, dict):
+                        raise ValueError("channel.event params.data must be an object")
+                    await self._plugin.on_event(event, data)
                     result = {"ok": True}
 
                 case "channel.stop":
@@ -194,6 +211,9 @@ class PluginTransport:
     async def _notify(self, method: str, params: dict[str, Any]) -> None:
         if self._ws is not None:
             await self._ws.send(rpc.build_notification(method, params))
+
+    async def _notify_event(self, event: str, data: dict[str, Any]) -> None:
+        await self._notify("channel.event", {"event": event, "data": data})
 
     async def request(
         self, method: str, params: dict[str, Any] | None = None

@@ -26,6 +26,7 @@ dependencies = [
     "websockets>=12",
     "pydantic>=2",
     "rich>=13",
+    "cryptography>=43",
 ]
 
 [project.scripts]

@@ -14,11 +14,13 @@ import asyncio
 import logging
 import signal
 import sys
+from pathlib import Path
 
 import typer
 import websockets
 
-from .relay import get_connected_devices, handle_connection
+from .auth import GatewayAuthManager
+from .relay import configure_auth, get_connected_devices, handle_connection
 
 logger = logging.getLogger(__name__)
 
@@ -43,10 +45,32 @@ def _setup_logging(verbose: bool) -> None:
 def run(
     host: str = typer.Option("0.0.0.0", "--host", "-H", help="Bind host"),
     port: int = typer.Option(8765, "--port", "-p", help="Bind port"),
+    desktop_pubkey: str = typer.Option(
+        "",
+        "--desktop-pubkey",
+        help="Desktop Ed25519 public key (base64). If omitted, gateway can be claimed by first desktop connection.",
+    ),
+    state_dir: str = typer.Option(
+        ".",
+        "--state-dir",
+        help="Directory used to persist gateway auth state.",
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Start the phbgateway WebSocket relay server."""
     _setup_logging(verbose)
+    auth_manager = GatewayAuthManager(
+        state_file=Path(state_dir).resolve() / "gateway_state.json",
+        desktop_public_key_b64=desktop_pubkey or None,
+    )
+    configure_auth(auth_manager)
+    if auth_manager.is_claimed():
+        logger.info("Gateway trust root is configured.")
+    else:
+        logger.warning(
+            "Gateway trust root is not configured yet. "
+            "Waiting for first desktop claim connection."
+        )
     asyncio.run(_serve(host, port))
 
 

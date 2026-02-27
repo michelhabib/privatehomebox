@@ -37,11 +37,17 @@ from .config import (
     Config,
     load_config,
     load_state,
+    master_key_path,
     save_config,
 )
+from .crypto import desktop_public_key_b64, load_or_create_master_key
+from .pairing import (
+    create_pairing_session,
+    load_approved_devices,
+    revoke_approved_device,
+    save_pairing_session,
+)
 from .process import is_running, read_pid, remove_pid, stop_server, write_pid
-from .server import run_http_server
-from .ws_client import run_ws_client
 
 app = typer.Typer(
     name="phbcli",
@@ -49,6 +55,8 @@ app = typer.Typer(
     add_completion=False,
 )
 console = Console()
+
+MANDATORY_CHANNEL = "devices"
 
 
 # ---------------------------------------------------------------------------
@@ -84,12 +92,23 @@ def setup(
         gateway_url=gateway_url,
         http_host=existing.http_host,
         http_port=http_port,
+        plugin_port=existing.plugin_port,
+        master_key_file=existing.master_key_file,
+        pairing_code_length=existing.pairing_code_length,
+        pairing_code_ttl_seconds=existing.pairing_code_ttl_seconds,
+        attestation_expires_days=existing.attestation_expires_days,
     )
     save_config(config)
+    private_key = load_or_create_master_key(APP_DIR, filename=config.master_key_file)
+    public_key_b64 = desktop_public_key_b64(private_key)
+    _ensure_mandatory_devices_channel(config)
     console.print(f"[green]Config saved to[/green] {APP_DIR / 'config.json'}")
     console.print(f"  device_id  : [bold]{config.device_id}[/bold]")
     console.print(f"  gateway_url: [bold]{config.gateway_url}[/bold]")
     console.print(f"  http_port  : [bold]{config.http_port}[/bold]")
+    console.print(f"  master_key : [bold]{master_key_path(config)}[/bold]")
+    console.print(f"  desktop_pub: [bold]{public_key_b64}[/bold]")
+    console.print("  channel    : [bold]devices[/bold] (mandatory)")
 
     if not skip_autostart:
         _register_autostart_with_feedback(elevated=elevated_task)
@@ -152,6 +171,29 @@ def _register_autostart_standard() -> None:
         console.print("[yellow]Auto-start method unknown.[/yellow]")
 
 
+def _ensure_mandatory_devices_channel(config: Config) -> None:
+    """Create/update the mandatory `devices` channel config."""
+    existing = load_channel_config(MANDATORY_CHANNEL)
+    workspace = find_workspace_root()
+    workspace_dir = str(workspace) if workspace else (
+        existing.workspace_dir if existing else ""
+    )
+    channel_cfg = ChannelConfig(
+        name=MANDATORY_CHANNEL,
+        enabled=True,
+        command=existing.command if existing and existing.command else [f"phb-channel-{MANDATORY_CHANNEL}"],
+        config={
+            **(existing.config if existing else {}),
+            "gateway_url": config.gateway_url,
+            "device_id": config.device_id,
+            "master_key_path": str(master_key_path(config)),
+            "ping_interval": (existing.config.get("ping_interval", 30) if existing else 30),
+        },
+        workspace_dir=workspace_dir,
+    )
+    save_channel_config(channel_cfg)
+
+
 # ---------------------------------------------------------------------------
 # start
 # ---------------------------------------------------------------------------
@@ -169,6 +211,8 @@ def start() -> None:
 
 
 def _do_start(config: Config) -> None:
+    load_or_create_master_key(APP_DIR, filename=config.master_key_file)
+    _ensure_mandatory_devices_channel(config)
     pid = read_pid()
     if pid and is_running(pid):
         console.print(f"[yellow]Server already running (PID {pid}).[/yellow]")
@@ -390,6 +434,13 @@ channel_app = typer.Typer(
 )
 app.add_typer(channel_app, name="channel")
 
+device_app = typer.Typer(
+    name="device",
+    help="Manage paired device approvals.",
+    add_completion=False,
+)
+app.add_typer(device_app, name="device")
+
 
 @channel_app.command("list")
 def channel_list() -> None:
@@ -469,6 +520,9 @@ def channel_setup(
     The channel will be auto-started next time phbcli starts.
     """
     existing = load_channel_config(name)
+    if name == MANDATORY_CHANNEL and not enable:
+        console.print("[yellow]Ignoring --no-enable: 'devices' is mandatory.[/yellow]")
+        enable = True
 
     if command is None and existing and existing.command:
         default_cmd = " ".join(existing.command)
@@ -490,11 +544,23 @@ def channel_setup(
         existing.workspace_dir if existing else ""
     )
 
+    channel_data = existing.config if existing else {}
+    if name == MANDATORY_CHANNEL:
+        # Keep runtime gateway settings in sync for the mandatory devices plugin.
+        current = load_config()
+        channel_data = {
+            **channel_data,
+            "gateway_url": current.gateway_url,
+            "device_id": current.device_id,
+            "master_key_path": str(master_key_path(current)),
+            "ping_interval": channel_data.get("ping_interval", 30),
+        }
+
     cfg = ChannelConfig(
         name=name,
         enabled=enable,
         command=cmd_parts,
-        config=existing.config if existing else {},
+        config=channel_data,
         workspace_dir=workspace_dir,
     )
     save_channel_config(cfg)
@@ -539,6 +605,9 @@ def channel_disable(
     name: str = typer.Argument(..., help="Channel name"),
 ) -> None:
     """Disable a channel plugin without removing its configuration."""
+    if name == MANDATORY_CHANNEL:
+        console.print("[red]The 'devices' channel is mandatory and cannot be disabled.[/red]")
+        raise typer.Exit(1)
     cfg = load_channel_config(name)
     if cfg is None:
         console.print(f"[yellow]Channel '{name}' not configured.[/yellow]")
@@ -554,6 +623,9 @@ def channel_remove(
     yes: bool = typer.Option(False, "--yes", "-y", help="Skip confirmation prompt"),
 ) -> None:
     """Remove a channel plugin's configuration."""
+    if name == MANDATORY_CHANNEL:
+        console.print("[red]The 'devices' channel is mandatory and cannot be removed.[/red]")
+        raise typer.Exit(1)
     if not yes:
         typer.confirm(
             f"Remove configuration for channel '{name}'?", abort=True
@@ -599,6 +671,73 @@ def channel_status() -> None:
             ch.get("description", ""),
         )
     console.print(table)
+
+
+@device_app.command("add")
+def device_add(
+    ttl_seconds: int = typer.Option(
+        None,
+        "--ttl-seconds",
+        help="Pairing code lifetime in seconds (default from config).",
+    ),
+    code_length: int = typer.Option(
+        None,
+        "--code-length",
+        help="Pairing code length in digits (default from config).",
+    ),
+) -> None:
+    """Generate a short-lived pairing code for onboarding a mobile device."""
+    config = load_config()
+    effective_ttl = ttl_seconds or config.pairing_code_ttl_seconds
+    effective_length = code_length or config.pairing_code_length
+    session = create_pairing_session(
+        code_length=effective_length,
+        ttl_seconds=effective_ttl,
+    )
+    save_pairing_session(session)
+
+    console.print("[bold cyan]Pairing code created[/bold cyan]")
+    console.print(f"  code      : [bold]{session.code}[/bold]")
+    console.print(
+        f"  expires_at: [bold]{session.expires_at.isoformat().replace('+00:00', 'Z')}[/bold]"
+    )
+    console.print("Use this code in the mobile app immediately.")
+
+
+@device_app.command("list")
+def device_list() -> None:
+    """List approved paired devices."""
+    devices = load_approved_devices()
+    if not devices:
+        console.print("[dim]No approved devices yet.[/dim]")
+        return
+
+    table = Table(title="Approved devices", show_header=True)
+    table.add_column("Device ID", style="bold")
+    table.add_column("Paired At")
+    table.add_column("Expires At")
+
+    for device in devices:
+        paired_at = device.paired_at.isoformat().replace("+00:00", "Z")
+        expires_at = (
+            device.expires_at.isoformat().replace("+00:00", "Z")
+            if device.expires_at
+            else "—"
+        )
+        table.add_row(device.device_id, paired_at, expires_at)
+    console.print(table)
+
+
+@device_app.command("revoke")
+def device_revoke(
+    device_id: str = typer.Argument(..., help="Approved device_id to revoke"),
+) -> None:
+    """Revoke a previously approved paired device."""
+    removed = revoke_approved_device(device_id)
+    if removed:
+        console.print(f"[green]Revoked device[/green] [bold]{device_id}[/bold].")
+    else:
+        console.print(f"[yellow]Device not found:[/yellow] {device_id}")
 
 
 if __name__ == "__main__":

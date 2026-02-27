@@ -2,8 +2,9 @@
 
 **Private Home Box Gateway** — WebSocket relay server.
 
-Accepts connections from `phbcli` desktop clients and online apps, and relays
-messages between them identified by `device_id`.
+Accepts connections from `phbcli` desktop clients and online apps, performs
+challenge/response authentication, and relays messages between authenticated
+devices identified by `device_id`.
 
 ## Quick Start
 
@@ -11,15 +12,18 @@ messages between them identified by `device_id`.
 # Install and run with uv
 uv run phbgateway
 
-# Or with custom host/port
-uv run phbgateway --host 0.0.0.0 --port 8765
+# Or with custom host/port and state dir
+uv run phbgateway --host 0.0.0.0 --port 8765 --state-dir ./.gateway-state
 ```
 
 ## How it works
 
-1. A `phbcli` desktop client connects to `ws://<host>:<port>?device_id=<id>` and is registered.
-2. An online app connects the same way and sends a JSON message with a `target_device_id` field.
-3. The gateway looks up the target device in the registry and forwards the message.
+1. Every new socket receives an auth challenge nonce.
+2. A desktop client authenticates using its master key (`auth_mode=desktop`) and can
+   claim an uninitialized gateway by sending its public key once (`auth_mode=desktop_claim`).
+3. A device client authenticates with desktop attestation + nonce signature
+   (`auth_mode=device`).
+4. Once authenticated, messages are relayed by `device_id`.
 
 ## Message Format
 

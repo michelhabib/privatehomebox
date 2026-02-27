@@ -29,6 +29,7 @@ class ChannelPlugin(ABC):
 
     # Injected by PluginTransport — do not set manually.
     _emit_callback: Callable[[UnifiedMessage], Awaitable[None]] | None = None
+    _event_callback: Callable[[str, dict[str, Any]], Awaitable[None]] | None = None
 
     @property
     @abstractmethod
@@ -59,3 +60,12 @@ class ChannelPlugin(ABC):
         """
         if self._emit_callback is not None:
             await self._emit_callback(message)
+
+    async def emit_event(self, event: str, data: dict[str, Any] | None = None) -> None:
+        """Send a structured event back to phbcli (status, diagnostics, etc.)."""
+        if self._event_callback is not None:
+            await self._event_callback(event, data or {})
+
+    async def on_event(self, event: str, data: dict[str, Any]) -> None:
+        """Optional inbound event from phbcli to the plugin."""
+        _ = (event, data)
