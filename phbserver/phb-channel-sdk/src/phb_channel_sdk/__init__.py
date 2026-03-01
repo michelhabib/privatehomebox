@@ -7,12 +7,14 @@ Exports the key building blocks every plugin author needs:
   - rpc              — JSON-RPC 2.0 helpers (build / parse)
 """
 
+from . import log_setup
 from .base import ChannelPlugin
 from .models import ChannelInfo, RpcRequest, RpcResponse, UnifiedMessage
 from .transport import PluginTransport
 
 __version__ = "0.1.0"
 __all__ = [
+    "log_setup",
     "ChannelPlugin",
     "ChannelInfo",
     "RpcRequest",

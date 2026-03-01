@@ -3,24 +3,19 @@
 from __future__ import annotations
 
 import asyncio
-import logging
-import sys
+from pathlib import Path
 
 import typer
-from phb_channel_sdk import PluginTransport
+from phb_channel_sdk import PluginTransport, log_setup
 
 from .plugin import DevicesChannel
+
+_DEFAULT_LOG_DIR = str(Path.home() / ".phbcli" / "logs")
 
 app = typer.Typer(
     name="phb-channel-devices",
     help="Private Home Box devices channel plugin.",
     add_completion=False,
-)
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
 )
 
 
@@ -32,8 +27,14 @@ def run(
         help="WebSocket URL of phbcli plugin server.",
         envvar="PHB_WS",
     ),
+    log_dir: str = typer.Option(
+        _DEFAULT_LOG_DIR,
+        "--log-dir",
+        help="Directory for rotating log files.",
+    ),
 ) -> None:
     plugin = DevicesChannel()
+    log_setup.init(f"plugin-{plugin.info.name}", Path(log_dir))
     transport = PluginTransport(plugin, phb_ws)
     asyncio.run(transport.run())
 

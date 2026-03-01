@@ -1,0 +1,138 @@
+"""AgentManager — LLM agent worker for phbcli.
+
+Responsibilities:
+  - Reads inbound text messages from CommunicationManager.inbound_queue.
+  - Passes each message to a LangChain v1 create_agent instance.
+  - Maintains per-conversation memory keyed by channel + sender_id using
+    LangGraph's InMemorySaver checkpointer.
+  - Constructs a reply UnifiedMessage and places it on the outbound queue.
+  - On LLM errors, enqueues a human-readable fallback reply instead.
+
+Non-text messages (image, audio, video, etc.) are silently ignored by this
+worker; they remain unconsumed on the inbound queue only if no other consumer
+reads them first.  Currently inbound_queue has only one consumer (this worker),
+so non-text messages are drained and dropped.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import logging
+import uuid
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
+
+from phb_channel_sdk.models import UnifiedMessage
+
+from .agent_config import load_agent_config, load_system_prompt
+
+if TYPE_CHECKING:
+    from .communication_manager import CommunicationManager
+
+logger = logging.getLogger(__name__)
+
+_FALLBACK_ERROR_BODY = (
+    "Sorry, I encountered an error processing your message. Please try again."
+)
+
+
+def _build_thread_id(msg: UnifiedMessage) -> str:
+    return f"{msg.channel}:{msg.sender_id}"
+
+
+def _make_reply(inbound: UnifiedMessage, body: str) -> UnifiedMessage:
+    return UnifiedMessage(
+        id=str(uuid.uuid4()),
+        channel=inbound.channel,
+        direction="outbound",
+        sender_id=None,
+        recipient_id=inbound.sender_id,
+        content_type="text",
+        body=body,
+        metadata={},
+        timestamp=datetime.now(UTC),
+    )
+
+
+class AgentManager:
+    """Consumes inbound text messages and produces agent replies.
+
+    Usage::
+
+        agent_mgr = AgentManager(comm_manager)
+        await asyncio.gather(..., agent_mgr.run())
+    """
+
+    def __init__(self, comm_manager: CommunicationManager) -> None:
+        self._comm = comm_manager
+        self._agent = self._build_agent()
+
+    def _build_agent(self):
+        from langchain.agents import create_agent
+        from langchain.chat_models import init_chat_model
+        from langgraph.checkpoint.memory import InMemorySaver
+
+        config = load_agent_config()
+        system_prompt = load_system_prompt()
+
+        logger.info(
+            "Building agent with model=%s provider=%s",
+            config.model,
+            config.provider,
+        )
+
+        model = init_chat_model(
+            model=config.model,
+            model_provider=config.provider,
+            temperature=config.temperature,
+            max_tokens=config.max_tokens,
+        )
+
+        return create_agent(
+            model=model,
+            tools=[],
+            system_prompt=system_prompt,
+            checkpointer=InMemorySaver(),
+        )
+
+    async def _process(self, msg: UnifiedMessage) -> None:
+        thread_id = _build_thread_id(msg)
+        config = {"configurable": {"thread_id": thread_id}}
+        try:
+            result = await self._agent.ainvoke(
+                {"messages": [{"role": "user", "content": msg.body}]},
+                config=config,
+            )
+            reply_body: str = result["messages"][-1].content
+        except Exception as exc:
+            logger.error(
+                "Agent error [thread=%s]: %s",
+                thread_id,
+                exc,
+                exc_info=True,
+            )
+            reply_body = _FALLBACK_ERROR_BODY
+
+        reply = _make_reply(msg, reply_body)
+        await self._comm.enqueue_outbound(reply)
+        logger.debug(
+            "Agent reply enqueued [thread=%s content_length=%d]",
+            thread_id,
+            len(reply_body),
+        )
+
+    async def run(self) -> None:
+        """Drain inbound_queue and process text messages.  Runs forever."""
+        logger.info("AgentManager started.")
+        while True:
+            msg: UnifiedMessage = await self._comm.inbound_queue.get()
+            try:
+                if msg.content_type != "text":
+                    logger.debug(
+                        "AgentManager ignoring non-text message [content_type=%s]",
+                        msg.content_type,
+                    )
+                    continue
+                await self._process(msg)
+            finally:
+                self._comm.inbound_queue.task_done()

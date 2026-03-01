@@ -14,19 +14,40 @@ import signal
 import sys
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-    handlers=[
-        logging.StreamHandler(sys.stdout),
-    ],
-)
 logger = logging.getLogger("phbcli.server_process")
 
 
-async def _main() -> None:
-    from phbcli.config import APP_DIR, load_config, mark_connected, mark_disconnected
+async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
+    """Forward new lines from plugin-*.log files to stdout in foreground mode."""
+    positions: dict[str, int] = {}
+    while not stop_event.is_set():
+        await asyncio.sleep(0.5)
+        for log_file in sorted(log_dir.glob("plugin-*.log")):
+            key = str(log_file)
+            if key not in positions:
+                # Seek to end on first discovery — skip pre-existing history
+                try:
+                    positions[key] = log_file.stat().st_size
+                except OSError:
+                    positions[key] = 0
+                continue
+            try:
+                with log_file.open(encoding="utf-8", errors="replace") as fh:
+                    fh.seek(positions[key])
+                    chunk = fh.read()
+                    positions[key] = fh.tell()
+                if chunk:
+                    sys.stdout.write(chunk)
+                    sys.stdout.flush()
+            except OSError:
+                pass
+
+
+async def _main(foreground: bool = False) -> None:
+    from phb_channel_sdk import log_setup
+    from phbcli.config import APP_DIR, load_config, mark_connected, mark_disconnected, resolve_log_dir
     from phbcli.crypto import create_device_attestation, load_or_create_master_key
     from phbcli.pairing import (
         ApprovedDevice,
@@ -34,11 +55,20 @@ async def _main() -> None:
         load_pairing_session,
         upsert_approved_device,
     )
+    from phbcli.agent_manager import AgentManager
+    from phbcli.communication_manager import CommunicationManager
     from phbcli.plugin_manager import PluginManager
     from phbcli.process import write_pid
     from phbcli.server import run_http_server, set_channel_info_provider
 
     config = load_config()
+    log_dir = resolve_log_dir(config)
+    log_setup.init(
+        "server",
+        log_dir,
+        foreground=foreground,
+        log_levels=config.log_levels or None,
+    )
     desktop_private_key = load_or_create_master_key(APP_DIR, filename=config.master_key_file)
     stop_event = asyncio.Event()
     write_pid()
@@ -156,12 +186,16 @@ async def _main() -> None:
                 },
             )
 
+    comm_manager = CommunicationManager()
     plugin_manager = PluginManager(
         config,
         stop_event,
+        on_message=comm_manager.receive,
         on_event=_on_channel_event,
     )
+    comm_manager.set_plugin_manager(plugin_manager)
     set_channel_info_provider(plugin_manager.get_channel_info)
+    agent_manager = AgentManager(comm_manager)
 
     logger.info(
         "Starting phbcli server. HTTP: http://%s:%d/status  "
@@ -172,7 +206,28 @@ async def _main() -> None:
         config.device_id,
     )
 
-    await asyncio.gather(run_http_server(config, stop_event), plugin_manager.run())
+    coros = [
+        run_http_server(config, stop_event),
+        plugin_manager.run(),
+        comm_manager.run(),
+        agent_manager.run(),
+    ]
+    if foreground:
+        coros.append(_tail_plugin_logs(log_dir, stop_event))
+
+    server_task = asyncio.ensure_future(
+        asyncio.gather(*coros, return_exceptions=True)
+    )
+
+    # Block until a shutdown signal fires, then give plugin_manager its
+    # graceful-shutdown window before cancelling any remaining tasks.
+    await stop_event.wait()
+    await asyncio.sleep(1.5)
+    server_task.cancel()
+    try:
+        await server_task
+    except (asyncio.CancelledError, Exception):
+        pass
 
     mark_disconnected()
     logger.info("phbcli server exited.")

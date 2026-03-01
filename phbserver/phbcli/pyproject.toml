@@ -27,10 +27,17 @@ dependencies = [
     "pydantic>=2",
     "rich>=13",
     "cryptography>=43",
+    "langchain>=1.0",
+    "langgraph>=1.0",
+    "langchain-openai>=0.3",
+    "phb-channel-sdk",
 ]
 
 [project.scripts]
 phbcli = "phbcli.cli:app"
+
+[tool.uv.sources]
+phb-channel-sdk = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phbcli"]

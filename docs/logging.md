@@ -1,0 +1,270 @@
+# Logging
+
+## Overview
+
+PHB uses a single shared logging standard across all components: the `phbcli`
+server, channel plugin subprocesses, the gateway, and any future components.
+Every process writes its own rotating log file. An optional foreground mode
+aggregates all logs into one terminal view for development and debugging.
+
+---
+
+## Design
+
+| Goal | How it is achieved |
+|---|---|
+| Single standard | All components call `phb_channel_sdk.log_setup.init()` once at startup |
+| Per-process files | Each component writes to its own `<component>.log` under its log directory |
+| Automatic rotation | `RotatingFileHandler` — 5 MB per file, 5 rotated backups kept |
+| Consistent format | ISO-8601 UTC timestamps on every line, same across all components |
+| Configurable levels | Root level and per-logger overrides stored in `~/.phbcli/config.json` |
+| Live aggregated view | `phbcli start --foreground` streams server + all plugin logs to the terminal |
+
+---
+
+## Log file locations
+
+### phbcli server and plugins
+
+All phbcli components write to the same directory (default `~/.phbcli/logs/`):
+
+```
+~/.phbcli/logs/
+  server.log          ← phbcli core (plugin_manager, comm_manager, agent_manager, …)
+  plugin-devices.log  ← devices channel subprocess
+  plugin-telegram.log ← telegram channel subprocess (if installed)
+  plugin-echo.log     ← echo channel subprocess (if installed)
+  …
+```
+
+The directory is created automatically on first start.
+
+### Gateway
+
+```
+~/.phbgateway/logs/
+  gateway.log
+```
+
+---
+
+## Log format
+
+Every line follows this format:
+
+```
+2026-03-02T10:00:00.123Z [INFO    ] phbcli.agent_manager: Agent reply enqueued thread=devices:u1 content_length=42
+2026-03-02T10:00:01.456Z [WARNING ] phb_channel_sdk.transport: Disconnected from phbcli. Reconnecting in 5s…
+2026-03-02T10:00:02.789Z [DEBUG   ] phbcli.comm_manager: Inbound [channel=telegram sender=123456 content_type=text]
+```
+
+Fields:
+- **Timestamp** — ISO-8601 UTC with milliseconds, always `Z` suffix
+- **Level** — left-padded to 8 characters (`INFO    `, `WARNING `, `DEBUG   `, `ERROR   `)
+- **Logger name** — Python dotted module path, identifies the component and file
+- **Message** — structured key=value pairs for machine-readability, human-readable prose
+
+---
+
+## Configuration
+
+### Log directory
+
+Add `log_dir` to `~/.phbcli/config.json` to override the default:
+
+```json
+{
+  "log_dir": "/var/log/phbcli"
+}
+```
+
+Leave it empty (or omit it) to use the default `~/.phbcli/logs/`.
+
+For the gateway, pass `--log-dir` on the command line:
+
+```bash
+phbgateway --log-dir /var/log/phbgateway
+```
+
+### Per-logger level overrides
+
+Add `log_levels` to `~/.phbcli/config.json` to set DEBUG on specific loggers
+without changing the root level for everything:
+
+```json
+{
+  "log_levels": {
+    "phbcli.agent_manager": "DEBUG",
+    "phb_channel_devices.plugin": "DEBUG"
+  }
+}
+```
+
+Valid level strings: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`.
+
+Changes take effect on the next server restart.
+
+---
+
+## Viewing logs
+
+### Live — foreground mode
+
+Run the server in the foreground to see all logs in the terminal as they happen:
+
+```bash
+phbcli start --foreground
+# or
+phbcli start -f
+```
+
+In this mode:
+- The server process runs in the current terminal (Ctrl+C to stop)
+- Server logs stream directly to stdout
+- Each plugin's log file is tailed and its new lines are also printed to stdout
+- All lines share the same format so they can be read together by timestamp
+
+### File — detached mode (normal operation)
+
+In normal detached mode (`phbcli start`), all output is written to log files only.
+Read them directly:
+
+```powershell
+# Windows — tail server log
+Get-Content "$env:USERPROFILE\.phbcli\logs\server.log" -Wait -Tail 50
+
+# Windows — tail devices plugin log
+Get-Content "$env:USERPROFILE\.phbcli\logs\plugin-devices.log" -Wait -Tail 50
+```
+
+```bash
+# macOS / Linux
+tail -f ~/.phbcli/logs/server.log
+tail -f ~/.phbcli/logs/plugin-devices.log
+```
+
+### Viewing all log files together
+
+Because every line starts with an ISO-8601 UTC timestamp in the same format,
+any tool that can merge sorted text streams works:
+
+```bash
+# macOS / Linux — merge and sort by timestamp
+sort -m ~/.phbcli/logs/*.log | less
+
+# Or with multitail
+multitail ~/.phbcli/logs/server.log ~/.phbcli/logs/plugin-devices.log
+```
+
+---
+
+## The `log_setup` module
+
+All log initialisation lives in `phb-channel-sdk` at
+`phb_channel_sdk/log_setup.py` so that every component — including third-party
+channel plugins — can use the same standard without depending on `phbcli`.
+
+### `init(component, log_dir, *, level, foreground, log_levels)`
+
+Call this **once**, as the very first thing at process start, before any other
+logging calls.
+
+```python
+from pathlib import Path
+from phb_channel_sdk import log_setup
+
+log_setup.init(
+    "plugin-mytelegram",          # → ~/.phbcli/logs/plugin-mytelegram.log
+    Path.home() / ".phbcli" / "logs",
+)
+```
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `component` | `str` | required | Log-file stem, e.g. `"server"`, `"plugin-devices"`, `"gateway"` |
+| `log_dir` | `Path` | required | Directory for the rotating log file. Created if absent. |
+| `level` | `str` | `"INFO"` | Root logger level string |
+| `foreground` | `bool` | `False` | If `True`, also writes to `stdout` |
+| `log_levels` | `dict[str, str]` | `None` | Per-logger level overrides applied after the root level |
+
+### Naming convention for components
+
+| Component | `component` argument | Log file |
+|---|---|---|
+| phbcli server | `"server"` | `server.log` |
+| Channel plugin | `f"plugin-{plugin.info.name}"` | `plugin-<name>.log` |
+| Gateway | `"gateway"` | `gateway.log` |
+
+---
+
+## Writing a channel plugin that logs correctly
+
+The plugin entry point receives `--log-dir` from `PluginManager` automatically.
+Use it to initialise logging before the transport connects:
+
+```python
+import asyncio
+from pathlib import Path
+import typer
+from phb_channel_sdk import PluginTransport, log_setup
+from .plugin import MyChannel
+
+_DEFAULT_LOG_DIR = str(Path.home() / ".phbcli" / "logs")
+
+app = typer.Typer()
+
+@app.command()
+def run(
+    phb_ws: str = typer.Option("ws://127.0.0.1:18081", "--phb-ws"),
+    log_dir: str = typer.Option(_DEFAULT_LOG_DIR, "--log-dir"),
+) -> None:
+    plugin = MyChannel()
+    log_setup.init(f"plugin-{plugin.info.name}", Path(log_dir))
+    transport = PluginTransport(plugin, phb_ws)
+    asyncio.run(transport.run())
+```
+
+The plugin then uses the standard Python `logging` module throughout:
+
+```python
+import logging
+logger = logging.getLogger(__name__)
+
+class MyChannel(ChannelPlugin):
+    async def on_start(self) -> None:
+        logger.info("MyChannel started.")
+
+    async def on_stop(self) -> None:
+        logger.info("MyChannel stopped.")
+```
+
+Do **not** call `logging.basicConfig()` in a plugin. The `log_setup.init()` call
+in the entry point configures the root logger for the whole process.
+
+---
+
+## How `PluginManager` passes `--log-dir`
+
+`PluginManager._spawn_one` appends the log directory to every plugin command
+automatically, using the same `resolve_log_dir(config)` value as the server itself:
+
+```
+phb-channel-devices --phb-ws ws://127.0.0.1:18081 --log-dir ~/.phbcli/logs
+```
+
+This means plugin log files always land alongside the server log unless the
+user has explicitly overridden `log_dir` in `config.json`.
+
+---
+
+## File reference
+
+| File | Role |
+|---|---|
+| `phb-channel-sdk/src/phb_channel_sdk/log_setup.py` | Shared `init()` function — the only place log format, rotation, and handler setup is defined |
+| `phbcli/src/phbcli/config.py` | `Config.log_dir`, `Config.log_levels`, `resolve_log_dir()` |
+| `phbcli/src/phbcli/_server_process.py` | Calls `log_setup.init("server", …)` at the top of `_main()` |
+| `phbcli/src/phbcli/cli.py` | `phbcli start --foreground` flag; foreground path calls `_main(foreground=True)` |
+| `phbcli/src/phbcli/plugin_manager.py` | Appends `--log-dir` to every plugin subprocess command |
+| `gateway/src/phbgateway/main.py` | Calls `log_setup.init("gateway", …, foreground=True)` |
+| `channels/*/src/*/main.py` | Each plugin entry point calls `log_setup.init(f"plugin-{name}", log_dir)` |

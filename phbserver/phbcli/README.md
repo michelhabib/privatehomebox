@@ -27,6 +27,10 @@ phbcli setup --elevated-task
 phbcli start
 phbcli stop
 
+# Start in foreground with live log output (server + all plugin logs)
+phbcli start --foreground
+phbcli start -f
+
 # Check status
 phbcli status
 
@@ -47,7 +51,8 @@ phbcli uninstall
 | Command | Description |
 |---------|-------------|
 | `setup` | Interactive first-time configuration. Creates `~/.phbcli/`, generates device ID, registers Windows auto-start, then starts the server. On Windows it tries Task Scheduler first, then falls back to HKCU Run key if needed. |
-| `start` | Start the background server (FastAPI HTTP + WS client). |
+| `start` | Start the background server (FastAPI HTTP + plugin manager). |
+| `start -f` / `start --foreground` | Run the server in the foreground with live log output. Server logs and all plugin logs stream to the terminal. Ctrl+C to stop. |
 | `stop`  | Stop the running server. |
 | `status`| Show whether the server is running, WebSocket connection state, last connection time, and gateway URL. |
 | `device add` | Generate a short-lived numeric pairing code for onboarding a mobile device. |
@@ -67,15 +72,18 @@ phbcli uninstall
 
 All runtime data is stored in `~/.phbcli/`:
 
-- `config.json` — device ID and gateway URL
+- `config.json` — device ID, gateway URL, and logging settings (`log_dir`, `log_levels`)
 - `state.json` — live WebSocket connection state (updated by the running server)
 - `phbcli.pid` — PID of the running server process
 - `master_key.pem` — desktop Ed25519 master key used for gateway authentication
 - `pairing_session.json` — current active pairing code and expiry
 - `devices.json` — approved paired devices
+- `logs/server.log` — phbcli server log (rotating, 5 MB × 5 backups)
+- `logs/plugin-<name>.log` — one log file per channel plugin subprocess
 
 ## HTTP API
 
 When running, the server exposes a local HTTP API at `http://127.0.0.1:18080`:
 
 - `GET /status` — returns server/connection status as JSON
+- `GET /channels` — returns list of currently connected channel plugins (name, version, description)

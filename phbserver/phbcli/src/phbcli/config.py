@@ -16,6 +16,7 @@ from typing import Optional
 from pydantic import BaseModel, Field
 
 APP_DIR = Path.home() / ".phbcli"
+LOG_DIR = APP_DIR / "logs"
 CONFIG_FILE = APP_DIR / "config.json"
 STATE_FILE = APP_DIR / "state.json"
 PID_FILE = APP_DIR / "phbcli.pid"
@@ -31,6 +32,9 @@ class Config(BaseModel):
     pairing_code_length: int = 6
     pairing_code_ttl_seconds: int = 300
     attestation_expires_days: int = 30
+    # Logging — leave log_dir empty to use the default ~/.phbcli/logs/
+    log_dir: str = ""
+    log_levels: dict[str, str] = Field(default_factory=dict)
 
 
 class State(BaseModel):
@@ -91,3 +95,10 @@ def mark_disconnected() -> None:
 
 def master_key_path(config: Config) -> Path:
     return APP_DIR / config.master_key_file
+
+
+def resolve_log_dir(config: Config) -> Path:
+    """Return the effective log directory, falling back to ~/.phbcli/logs/."""
+    if config.log_dir:
+        return Path(config.log_dir)
+    return LOG_DIR

@@ -25,7 +25,7 @@ from websockets.asyncio.server import ServerConnection
 from websockets.exceptions import ConnectionClosed
 
 from .channel_config import ChannelConfig, list_enabled_channels
-from .config import Config
+from .config import Config, resolve_log_dir
 from . import rpc_helpers as rpc
 
 logger = logging.getLogger(__name__)
@@ -93,7 +93,11 @@ class PluginManager:
             await self._spawn_one(ch, phb_ws)
 
     async def _spawn_one(self, ch: ChannelConfig, phb_ws: str) -> None:
-        cmd = ch.effective_command() + ["--phb-ws", phb_ws]
+        log_dir = resolve_log_dir(self._config)
+        cmd = ch.effective_command() + [
+            "--phb-ws", phb_ws,
+            "--log-dir", str(log_dir),
+        ]
         logger.info("Spawning channel plugin: %s → %s", ch.name, cmd)
         try:
             if sys.platform == "win32":
@@ -104,16 +108,16 @@ class PluginManager:
                         | subprocess.CREATE_NO_WINDOW
                     ),
                     close_fds=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             else:
                 proc = subprocess.Popen(
                     cmd,
                     start_new_session=True,
                     close_fds=True,
-                    stdout=subprocess.PIPE,
-                    stderr=subprocess.PIPE,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             self._subprocesses.append(proc)
         except FileNotFoundError:

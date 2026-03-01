@@ -18,11 +18,14 @@ from pathlib import Path
 
 import typer
 import websockets
+from phb_channel_sdk import log_setup
 
 from .auth import GatewayAuthManager
 from .relay import configure_auth, get_connected_devices, handle_connection
 
 logger = logging.getLogger(__name__)
+
+_DEFAULT_LOG_DIR = Path.home() / ".phbgateway" / "logs"
 
 cli = typer.Typer(
     name="phbgateway",
@@ -30,15 +33,6 @@ cli = typer.Typer(
     add_completion=False,
     invoke_without_command=True,
 )
-
-
-def _setup_logging(verbose: bool) -> None:
-    level = logging.DEBUG if verbose else logging.INFO
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
 
 
 @cli.callback()
@@ -55,10 +49,24 @@ def run(
         "--state-dir",
         help="Directory used to persist gateway auth state.",
     ),
+    log_dir: str = typer.Option(
+        "",
+        "--log-dir",
+        help=(
+            f"Directory for rotating log files. "
+            f"Defaults to {_DEFAULT_LOG_DIR}"
+        ),
+    ),
     verbose: bool = typer.Option(False, "--verbose", "-v"),
 ) -> None:
     """Start the phbgateway WebSocket relay server."""
-    _setup_logging(verbose)
+    resolved_log_dir = Path(log_dir) if log_dir else _DEFAULT_LOG_DIR
+    log_setup.init(
+        "gateway",
+        resolved_log_dir,
+        level="DEBUG" if verbose else "INFO",
+        foreground=True,
+    )
     auth_manager = GatewayAuthManager(
         state_file=Path(state_dir).resolve() / "gateway_state.json",
         desktop_public_key_b64=desktop_pubkey or None,

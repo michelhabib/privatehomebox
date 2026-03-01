@@ -114,7 +114,7 @@ def setup(
         _register_autostart_with_feedback(elevated=elevated_task)
 
     console.print("\nStarting server…")
-    _do_start(config)
+    _do_start(config, foreground=False)
 
 
 def _register_autostart_with_feedback(*, elevated: bool = False) -> None:
@@ -199,23 +199,49 @@ def _ensure_mandatory_devices_channel(config: Config) -> None:
 # ---------------------------------------------------------------------------
 
 @app.command()
-def start() -> None:
-    """Start the phbcli server in the background."""
+def start(
+    foreground: bool = typer.Option(
+        False,
+        "--foreground",
+        "-f",
+        help=(
+            "Run the server in the foreground with live log output. "
+            "Plugin log files are also tailed and printed to the terminal. "
+            "Press Ctrl+C to stop."
+        ),
+    ),
+) -> None:
+    """Start the phbcli server (background by default, foreground with -f)."""
     config = load_config()
     if not (APP_DIR / "config.json").exists():
         console.print(
             "[red]Not configured. Run [bold]phbcli setup[/bold] first.[/red]"
         )
         raise typer.Exit(1)
-    _do_start(config)
+    _do_start(config, foreground=foreground)
 
 
-def _do_start(config: Config) -> None:
+def _do_start(config: Config, foreground: bool = False) -> None:
     load_or_create_master_key(APP_DIR, filename=config.master_key_file)
     _ensure_mandatory_devices_channel(config)
     pid = read_pid()
     if pid and is_running(pid):
         console.print(f"[yellow]Server already running (PID {pid}).[/yellow]")
+        return
+
+    if foreground:
+        import asyncio as _asyncio
+        from phbcli._server_process import _main
+        console.print(
+            f"[green]Server starting[/green] in foreground. "
+            f"HTTP: http://{config.http_host}:{config.http_port}/status  "
+            "[dim](Ctrl+C to stop)[/dim]"
+        )
+        try:
+            _asyncio.run(_main(foreground=True))
+        except KeyboardInterrupt:
+            pass
+        console.print("[green]Server stopped.[/green]")
         return
 
     # Spawn a detached child process that runs the server loop.

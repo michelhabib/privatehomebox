@@ -42,12 +42,23 @@ the unified PHB message format and whatever the third party requires.
 │  │              │   local WS     ├──────────────────────────────┤  │
 │  │              │◄──────────────►│ phb-channel-mobileapp        │  │
 │  │              │   JSON-RPC 2.0 │   (subprocess)               │  │
-│  └──────────────┘                │   Flutter WS ◄──────────────►│  │
-│         │                        └──────────────────────────────┘  │
-│         │ gateway WS                                                │
-│  ┌──────▼───────┐                                                   │
-│  │  ws_client   │─────────────────────────► phbgateway relay       │
-│  └──────────────┘                                                   │
+│  └──────┬───────┘                │   Flutter WS ◄──────────────►│  │
+│         │ on_message /           └──────────────────────────────┘  │
+│         │ send_to_channel                                           │
+│  ┌──────▼─────────────┐                                             │
+│  │CommunicationManager│                                             │
+│  │  inbound_queue  ───┼──► AgentManager                            │
+│  │  outbound_queue ◄──┼─── enqueue_outbound(reply)                 │
+│  │  permission check  │                                             │
+│  └────────────────────┘                                             │
+│                                                                     │
+│  ┌─────────────────────────────────────────────────┐               │
+│  │ AgentManager                                    │               │
+│  │   create_agent (LangChain v1)                   │               │
+│  │   InMemorySaver checkpointer                    │               │
+│  │   thread_id = "channel:sender_id"               │               │
+│  │   system_prompt  ←  ~/.phbcli/agent/            │               │
+│  └─────────────────────────────────────────────────┘               │
 │                                                                     │
 │  ┌──────────────┐                                                   │
 │  │ HTTP server  │  GET /status   GET /channels                      │
@@ -79,13 +90,33 @@ Lives in `phbcli/plugin_manager.py`. On `phbcli start` it:
 
 1. Opens a WebSocket server on `ws://127.0.0.1:<plugin_port>` (default `18081`).
 2. Reads `~/.phbcli/channels/*.json` to discover enabled channels.
-3. Spawns one subprocess per enabled channel, appending `--phb-ws <url>`.
+3. Spawns one subprocess per enabled channel, appending `--phb-ws <url>` and
+   `--log-dir <path>`. Subprocess stdout/stderr are discarded — each plugin
+   writes its own rotating log file to the log directory.
 4. Accepts incoming connections from plugin processes.
 5. Pushes the stored per-channel config (`config` field) to each plugin
    immediately after it registers.
 6. Routes inbound messages from plugins to the configured `on_message` callback.
 7. On shutdown: sends `channel.stop` to every plugin, waits 1 second, then
    terminates any remaining subprocesses.
+
+### CommunicationManager (phbcli)
+
+The central message router between `PluginManager` and the application core —
+handles inbound/outbound queuing and permission checks.
+
+See [communication-manager.md](communication-manager.md) for full details.
+
+### AgentManager (phbcli)
+
+The LLM worker that consumes text messages from the inbound queue, invokes
+a LangChain v1 `create_agent` instance, and pushes replies to the outbound
+queue.  Per-conversation memory is maintained using LangGraph's
+`InMemorySaver` checkpointer, keyed by `channel:sender_id`.
+
+See [agent-manager.md](agent-manager.md) for full details.
+
+---
 
 ### Channel config files
 
@@ -145,15 +176,29 @@ Telegram API ──► plugin polling loop
             PluginManager.on_message(params)
                       │
                       ▼
-          phbcli routes to gateway / local handlers
+      CommunicationManager.receive(params)
+        [validate → permission check]
+                      │
+                      ▼
+          CommunicationManager.inbound_queue
+                      │
+                      ▼
+              AgentManager.run()
+          [text only → create_agent.ainvoke]
+                      │
+                      ▼
+          CommunicationManager.outbound_queue
 ```
 
 ### Example flow — outbound message to Telegram
 
 ```
-phbcli decides to send a message
+application core decides to send a message
         │
         ▼
+CommunicationManager.enqueue_outbound(unified_msg)
+        │
+        ▼  (outbound worker — permission check)
 PluginManager.send_to_channel("telegram", unified_msg)
         │
         ▼  (WS notification)
@@ -208,9 +253,15 @@ phbcli start
   │
   └─ for each enabled channel:
        │
-       ├─ subprocess.Popen(["phb-channel-telegram", "--phb-ws", "ws://127.0.0.1:18081"])
+       ├─ subprocess.Popen(
+       │      ["phb-channel-telegram",
+       │       "--phb-ws",   "ws://127.0.0.1:18081",
+       │       "--log-dir",  "~/.phbcli/logs"],   ← passed by PluginManager
+       │      stdout=DEVNULL, stderr=DEVNULL)      ← plugin writes its own log file
        │
        └─ plugin process starts
+            │
+            ├─ log_setup.init("plugin-telegram", log_dir)  ← rotating log file
             │
             ├─ PluginTransport.run()
             │     ├─ connects to ws://127.0.0.1:18081
@@ -218,6 +269,7 @@ phbcli start
             │     └─ calls plugin.on_start()
             │
             └─ [running — polling / webhooks / forwarding messages]
+                 logs → ~/.phbcli/logs/plugin-telegram.log
 
 phbcli stop
   │
