@@ -1,2 +1,5 @@
 [tool.uv.workspace]
 members = ["phbcli", "gateway", "phb-channel-sdk", "phb-logger", "channels/*"]
+
+[dependency-groups]
+dev = ["debugpy>=1.8,<2"]

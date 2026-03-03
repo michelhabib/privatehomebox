@@ -3,10 +3,11 @@
     "configurations": [
       {
         "name": "Debug phbgateway",
-        "type": "python",
+        "type": "debugpy",
         "request": "launch",
         "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
         "module": "phbgateway.main",
+        "args": ["--desktop-pubkey", "MgHSUe5hqc9/cgCCZyh+JZ+SzrC7fPjQt0cd8CKtaOY="],
         "cwd": "${workspaceFolder}\\phbserver",
         "env": {
           "PYTHONPATH": "${workspaceFolder}\\phbserver\\gateway\\src;${workspaceFolder}\\phbserver\\phb-channel-sdk\\src"
@@ -16,7 +17,7 @@
       },
       {
         "name": "Debug phbcli start -f",
-        "type": "python",
+        "type": "debugpy",
         "request": "launch",
         "python": "${workspaceFolder}\\phbserver\\.venv\\Scripts\\python.exe",
         "module": "phbcli.cli",
@@ -32,7 +33,7 @@
         "name": "Terminal Flutter mobile_app",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\mobile_app && flutter run\""
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\mobile_app && flutter run -d chrome --web-port 62000\""
       }
     ],
     "compounds": [

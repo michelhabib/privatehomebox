@@ -45,7 +45,7 @@ def _make_reply(inbound: UnifiedMessage, body: str) -> UnifiedMessage:
         id=str(uuid.uuid4()),
         channel=inbound.channel,
         direction="outbound",
-        sender_id=None,
+        sender_id="server",
         recipient_id=inbound.sender_id,
         content_type="text",
         body=body,

@@ -91,15 +91,18 @@ async def _serve(host: str, port: int) -> None:
         log.info("Shutdown signal received")
         stop_event.set()
 
+    loop = asyncio.get_running_loop()
     if sys.platform != "win32":
-        loop = asyncio.get_running_loop()
         for sig in (signal.SIGTERM, signal.SIGINT):
             loop.add_signal_handler(sig, _shutdown)
     else:
-        signal.signal(signal.SIGTERM, _shutdown)
-        signal.signal(signal.SIGINT, _shutdown)
+        # signal handlers on Windows run in the main thread outside the event
+        # loop, so call_soon_threadsafe is required to safely set the asyncio
+        # Event from there.
+        signal.signal(signal.SIGTERM, lambda *_: loop.call_soon_threadsafe(stop_event.set))
+        signal.signal(signal.SIGINT,  lambda *_: loop.call_soon_threadsafe(stop_event.set))
 
-    async with websockets.serve(handle_connection, host, port) as server:
+    async with websockets.serve(handle_connection, host, port, reuse_address=True) as server:
         log.info("Gateway listening", url=f"ws://{host}:{port}")
         await stop_event.wait()
         log.info("Shutting down", connected_devices=get_connected_devices())

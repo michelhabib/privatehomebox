@@ -9,6 +9,7 @@ The PluginManager reads these on startup to know which channels to launch.
 from __future__ import annotations
 
 import json
+import sys
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -41,8 +42,24 @@ class ChannelConfig:
     def effective_command(self) -> list[str]:
         base = self.command if self.command else [f"phb-channel-{self.name}"]
         if self.workspace_dir:
+            if self._should_use_module_launcher(base):
+                module_name = f"phb_channel_{self.name.replace('-', '_')}.main"
+                return [
+                    "uv",
+                    "run",
+                    "--directory",
+                    self.workspace_dir,
+                    "python",
+                    "-m",
+                    module_name,
+                ]
             return ["uv", "run", "--directory", self.workspace_dir] + base
         return base
+
+    def _should_use_module_launcher(self, base: list[str]) -> bool:
+        if sys.platform != "win32":
+            return False
+        return base == [f"phb-channel-{self.name}"]
 
 
 def find_workspace_root(start: Path | None = None) -> Path | None:
