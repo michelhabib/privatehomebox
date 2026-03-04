@@ -30,10 +30,10 @@
         "justMyCode": false
       },
       {
-        "name": "Terminal Flutter mobile_app",
+        "name": "Terminal Flutter device_app",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\mobile_app && flutter run -d chrome --web-port 62000\""
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && flutter run -d chrome --web-port 62000\""
       }
     ],
     "compounds": [
@@ -42,7 +42,7 @@
         "configurations": [
           "Debug phbgateway",
           "Debug phbcli start -f",
-          "Terminal Flutter mobile_app"
+          "Terminal Flutter device_app"
         ]
       }
     ]
