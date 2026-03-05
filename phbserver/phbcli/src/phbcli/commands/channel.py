@@ -16,8 +16,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from ..channel_config import load_channel_config, workspace_channels_dir
-from ..services.bootstrap import MANDATORY_CHANNEL
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+
+from ..domain.channel_config import load_channel_config, workspace_channels_dir
+from ..domain.workspace import WorkspaceError, resolve_workspace
 from ..tools.channel import (
     ChannelDisableTool,
     ChannelEnableTool,
@@ -26,7 +28,6 @@ from ..tools.channel import (
     ChannelRemoveTool,
     ChannelSetupTool,
 )
-from ..workspace import WorkspaceError, resolve_workspace
 
 
 def register(channel_app: typer.Typer, console: Console) -> None:
@@ -118,7 +119,6 @@ def register(channel_app: typer.Typer, console: Console) -> None:
         else:
             default_cmd = command or f"phb-channel-{name}"
 
-        # Interactive prompt — CLI concern only; tool receives the resolved value.
         resolved_command: str = typer.prompt(
             f"Command to start the '{name}' plugin",
             default=default_cmd,
@@ -208,7 +208,7 @@ def register(channel_app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Show connected channel plugins (queries the running server)."""
         workspace_path = _resolve_workspace_path(workspace, console)
-        from ..config import load_config
+        from ..domain.config import load_config
         config = load_config(workspace_path)
         url = f"http://{config.http_host}:{config.http_port}/channels"
         try:

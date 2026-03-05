@@ -10,14 +10,14 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..config import load_config
-from ..pairing import (
+from ..domain.config import load_config
+from ..domain.pairing import (
     create_pairing_session,
     load_approved_devices,
     revoke_approved_device,
     save_pairing_session,
 )
-from ..workspace import resolve_workspace
+from ..domain.workspace import resolve_workspace
 from .base import Tool, ToolParam
 
 

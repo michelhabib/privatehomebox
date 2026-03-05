@@ -22,15 +22,15 @@ from phb_commons.log import Logger
 from phb_commons.process import is_running, read_pid
 from pydantic import BaseModel
 
-from .config import Config, load_state
-from .constants import APP_NAME, PID_FILENAME
-from .tools.registry import ToolExecutionError, ToolNotFoundError, ToolRegistry
+from ..domain.config import Config, load_state
+from ..constants import APP_NAME, PID_FILENAME
+from ..tools.registry import ToolExecutionError, ToolNotFoundError, ToolRegistry
 
 log = Logger.get("HTTP")
 
 app = FastAPI(title=APP_NAME, version="0.1.0", docs_url=None, redoc_url=None)
 
-# Injected by _server_process.py before the server starts.
+# Injected by runtime/server_process.py before the server starts.
 _workspace_path: Path | None = None
 _get_channel_info: Callable[[], list[dict[str, str]]] | None = None
 _tool_registry: ToolRegistry | None = None

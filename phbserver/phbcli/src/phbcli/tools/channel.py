@@ -12,7 +12,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..channel_config import (
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+
+from ..domain.channel_config import (
     ChannelConfig,
     delete_channel_config,
     find_workspace_root,
@@ -20,9 +22,8 @@ from ..channel_config import (
     load_channel_config,
     save_channel_config,
 )
-from ..config import load_config, master_key_path
-from ..services.bootstrap import MANDATORY_CHANNEL
-from ..workspace import resolve_workspace
+from ..domain.config import load_config, master_key_path
+from ..domain.workspace import resolve_workspace
 from .base import Tool, ToolParam
 
 
@@ -154,7 +155,7 @@ class ChannelSetupTool(Tool):
         workspace_path = _resolve_path(workspace)
         existing = load_channel_config(workspace_path, channel_name)
 
-        if channel_name == MANDATORY_CHANNEL:
+        if channel_name == MANDATORY_CHANNEL_NAME:
             enabled = True
 
         cmd_parts = command.split()
@@ -164,7 +165,7 @@ class ChannelSetupTool(Tool):
         )
 
         channel_data = existing.config if existing else {}
-        if channel_name == MANDATORY_CHANNEL:
+        if channel_name == MANDATORY_CHANNEL_NAME:
             current = load_config(workspace_path)
             channel_data = {
                 **channel_data,
@@ -222,8 +223,8 @@ class ChannelDisableTool(Tool):
 
     def execute(self, channel_name: str, workspace: str | None = None) -> ChannelDisableResult:
         workspace_path = _resolve_path(workspace)
-        if channel_name == MANDATORY_CHANNEL:
-            raise ValueError(f"The '{MANDATORY_CHANNEL}' channel is mandatory and cannot be disabled.")
+        if channel_name == MANDATORY_CHANNEL_NAME:
+            raise ValueError(f"The '{MANDATORY_CHANNEL_NAME}' channel is mandatory and cannot be disabled.")
         cfg = load_channel_config(workspace_path, channel_name)
         if cfg is None:
             raise ValueError(f"Channel '{channel_name}' is not configured.")
@@ -242,7 +243,7 @@ class ChannelRemoveTool(Tool):
 
     def execute(self, channel_name: str, workspace: str | None = None) -> ChannelRemoveResult:
         workspace_path = _resolve_path(workspace)
-        if channel_name == MANDATORY_CHANNEL:
-            raise ValueError(f"The '{MANDATORY_CHANNEL}' channel is mandatory and cannot be removed.")
+        if channel_name == MANDATORY_CHANNEL_NAME:
+            raise ValueError(f"The '{MANDATORY_CHANNEL_NAME}' channel is mandatory and cannot be removed.")
         removed = delete_channel_config(workspace_path, channel_name)
         return ChannelRemoveResult(name=channel_name, removed=removed)

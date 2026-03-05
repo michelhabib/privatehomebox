@@ -5,9 +5,9 @@ asyncio event loop.  Gateway connectivity is owned by the mandatory
 `devices` channel plugin.
 
 Workspace path resolution:
-  - Foreground mode: workspace_path is passed directly by server_control.py.
+  - Foreground mode: workspace_path is passed directly by tools/server.py.
   - Background mode: workspace_path is read from the PHB_WORKSPACE_PATH env var
-    set by server_control.py before Popen.
+    set by tools/server.py before Popen.
 """
 
 from __future__ import annotations
@@ -65,19 +65,19 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
         workspace_path = Path(ws_str)
 
     from phb_channel_sdk import log_setup
-    from phbcli.config import load_config, mark_connected, mark_disconnected, resolve_log_dir
-    from phbcli.crypto import load_or_create_master_key
-    from phbcli.pairing import (
+    from phbcli.domain.config import load_config, mark_connected, mark_disconnected, resolve_log_dir
+    from phbcli.domain.crypto import load_or_create_master_key
+    from phbcli.domain.pairing import (
         ApprovedDevice,
         clear_pairing_session,
         load_pairing_session,
         upsert_approved_device,
     )
-    from phbcli.agent_config import load_agent_config, load_system_prompt
-    from phbcli.agent_manager import AgentManager
-    from phbcli.communication_manager import CommunicationManager
-    from phbcli.plugin_manager import PluginManager
-    from phbcli.server import run_http_server, set_channel_info_provider, set_tool_registry, set_workspace_path
+    from phbcli.domain.agent_config import load_agent_config, load_system_prompt
+    from phbcli.runtime.agent_manager import AgentManager
+    from phbcli.runtime.communication_manager import CommunicationManager
+    from phbcli.runtime.plugin_manager import PluginManager
+    from phbcli.runtime.http_server import run_http_server, set_channel_info_provider, set_tool_registry, set_workspace_path
     from phbcli.tools import (
         ChannelDisableTool,
         ChannelEnableTool,

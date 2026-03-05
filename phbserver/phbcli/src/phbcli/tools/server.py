@@ -7,13 +7,19 @@ wrappers that parse flags, call execute(), and render the result.
 
 from __future__ import annotations
 
+import os
 import shutil
+import subprocess
+import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from phb_commons.keys import public_key_to_b64
-from phb_commons.process import is_running, read_pid
+from phb_commons.process import is_running, read_pid, remove_pid, stop_process, write_pid
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
+from rich.console import Console
 
 from ..autostart import (
     register_autostart,
@@ -21,11 +27,15 @@ from ..autostart import (
     unregister_autostart,
     unregister_autostart_elevated,
 )
-from ..config import Config, load_config, load_state, master_key_path, save_config
-from ..crypto import load_or_create_master_key
-from ..services.bootstrap import ensure_mandatory_devices_channel
-from ..services.server_control import do_start, do_stop
-from ..workspace import (
+from ..domain.channel_config import (
+    ChannelConfig,
+    find_workspace_root,
+    load_channel_config,
+    save_channel_config,
+)
+from ..domain.config import Config, load_config, load_state, master_key_path, resolve_log_dir, save_config
+from ..domain.crypto import load_or_create_master_key
+from ..domain.workspace import (
     WorkspaceError,
     WorkspaceRegistry,
     create_workspace,
@@ -35,6 +45,7 @@ from ..workspace import (
     remove_workspace,
     resolve_workspace,
 )
+from ..constants import ENV_WORKSPACE_PATH, PID_FILENAME
 from .base import Tool, ToolParam
 
 
@@ -108,6 +119,125 @@ class UninstallResult:
 
 
 # ---------------------------------------------------------------------------
+# Server process helpers (absorbed from services/server_control.py)
+# ---------------------------------------------------------------------------
+
+
+def _do_start(
+    workspace_path: Path,
+    config: Config,
+    console: Console,
+    *,
+    foreground: bool = False,
+) -> None:
+    """Start the phbcli server for a workspace."""
+    load_or_create_master_key(workspace_path, filename=config.master_key_file)
+    _ensure_mandatory_devices_channel(workspace_path, config)
+
+    pid = read_pid(workspace_path, PID_FILENAME)
+    if pid and is_running(pid):
+        console.print(f"[yellow]Server already running (PID {pid}).[/yellow]")
+        return
+
+    if foreground:
+        import asyncio as _asyncio
+
+        from phbcli.runtime.server_process import _main
+
+        console.print(
+            f"[green]Server starting[/green] in foreground. "
+            f"HTTP: http://{config.http_host}:{config.http_port}/status  "
+            "[dim](Ctrl+C to stop)[/dim]"
+        )
+        try:
+            _asyncio.run(_main(foreground=True, workspace_path=workspace_path))
+        except KeyboardInterrupt:
+            pass
+        console.print("[green]Server stopped.[/green]")
+        return
+
+    python = sys.executable
+    if sys.platform == "win32" and python.lower().endswith("python.exe"):
+        pythonw = str(Path(python).with_name("pythonw.exe"))
+        if Path(pythonw).exists():
+            python = pythonw
+
+    script = str(Path(__file__).parents[1] / "runtime" / "server_process.py")
+    env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
+
+    if sys.platform == "win32":
+        proc = subprocess.Popen(
+            [python, script],
+            env=env,
+            creationflags=(
+                subprocess.DETACHED_PROCESS
+                | subprocess.CREATE_NEW_PROCESS_GROUP
+                | subprocess.CREATE_NO_WINDOW
+            ),
+            close_fds=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    else:
+        proc = subprocess.Popen(
+            [python, script],
+            env=env,
+            start_new_session=True,
+            close_fds=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    write_pid(workspace_path, PID_FILENAME, proc.pid)
+    console.print(
+        f"[green]Server started[/green] (PID {proc.pid}). "
+        f"HTTP: http://{config.http_host}:{config.http_port}/status"
+    )
+
+
+def _do_stop(workspace_path: Path, console: Console) -> None:
+    """Stop the server for a workspace."""
+    pid = read_pid(workspace_path, PID_FILENAME)
+    if pid is None or not is_running(pid):
+        console.print("[yellow]Server is not running.[/yellow]")
+        remove_pid(workspace_path, PID_FILENAME)
+    else:
+        stopped = stop_process(workspace_path, PID_FILENAME)
+        if stopped:
+            console.print(f"[green]Server stopped[/green] (was PID {pid}).")
+        else:
+            console.print("[red]Failed to stop server.[/red]")
+
+
+# ---------------------------------------------------------------------------
+# Bootstrap helper (absorbed from services/bootstrap.py)
+# ---------------------------------------------------------------------------
+
+
+def _ensure_mandatory_devices_channel(workspace_path: Path, config: Config) -> None:
+    """Create/update the mandatory `devices` channel config inside the workspace."""
+    existing = load_channel_config(workspace_path, MANDATORY_CHANNEL_NAME)
+    uv_workspace = find_workspace_root()
+    workspace_dir = str(uv_workspace) if uv_workspace else (
+        existing.workspace_dir if existing else ""
+    )
+    channel_cfg = ChannelConfig(
+        name=MANDATORY_CHANNEL_NAME,
+        enabled=True,
+        command=existing.command if existing and existing.command else [f"phb-channel-{MANDATORY_CHANNEL_NAME}"],
+        config={
+            **(existing.config if existing else {}),
+            "gateway_url": config.gateway_url,
+            "device_id": config.device_id,
+            "master_key_path": str(master_key_path(workspace_path, config)),
+            "ping_interval": (existing.config.get("ping_interval", DEFAULT_PING_INTERVAL_SECONDS) if existing else DEFAULT_PING_INTERVAL_SECONDS),
+        },
+        workspace_dir=workspace_dir,
+    )
+    save_channel_config(workspace_path, channel_cfg)
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 
@@ -126,8 +256,6 @@ def _resolve_or_create(workspace: str | None) -> tuple[Any, WorkspaceRegistry, P
 
 def _register_autostart(workspace_name: str, elevated: bool) -> tuple[bool, str]:
     """Register auto-start and return (success, method_label)."""
-    import sys
-
     if elevated and sys.platform == "win32":
         try:
             accepted = register_autostart_elevated(workspace_name)
@@ -144,8 +272,6 @@ def _register_autostart(workspace_name: str, elevated: bool) -> tuple[bool, str]
 
 
 def _unregister_autostart(workspace_name: str, elevated: bool) -> bool:
-    import sys
-
     if elevated and sys.platform == "win32":
         try:
             accepted = unregister_autostart_elevated(workspace_name)
@@ -211,7 +337,7 @@ class SetupTool(Tool):
         save_config(workspace_path, config)
         private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
         public_key_b64 = public_key_to_b64(private_key.public_key())
-        ensure_mandatory_devices_channel(workspace_path, config)
+        _ensure_mandatory_devices_channel(workspace_path, config)
 
         autostart_registered = False
         autostart_method = "skipped"
@@ -220,7 +346,7 @@ class SetupTool(Tool):
                 entry.name, elevated_task
             )
 
-        do_start(workspace_path, entry, registry, config, _NullConsole(), foreground=False)
+        _do_start(workspace_path, config, _NullConsole(), foreground=False)
 
         return SetupResult(
             workspace=entry.name,
@@ -263,8 +389,6 @@ class StartTool(Tool):
 
         config = load_config(workspace_path)
 
-        from ..constants import PID_FILENAME
-
         pid = read_pid(workspace_path, PID_FILENAME)
         if pid and is_running(pid):
             return StartResult(
@@ -276,7 +400,7 @@ class StartTool(Tool):
                 http_port=config.http_port,
             )
 
-        do_start(workspace_path, entry, registry, config, _NullConsole(), foreground=foreground)
+        _do_start(workspace_path, config, _NullConsole(), foreground=foreground)
 
         new_pid = read_pid(workspace_path, PID_FILENAME)
         return StartResult(
@@ -299,12 +423,10 @@ class StopTool(Tool):
     def execute(self, workspace: str | None = None) -> StopResult:
         entry, _, workspace_path = _resolve_or_create(workspace)
 
-        from ..constants import PID_FILENAME
-
         pid = read_pid(workspace_path, PID_FILENAME)
         was_running = pid is not None and is_running(pid)
 
-        do_stop(workspace_path, entry, _NullConsole())
+        _do_stop(workspace_path, _NullConsole())
         return StopResult(workspace=entry.name, was_running=was_running, pid=pid)
 
 
@@ -383,7 +505,7 @@ class TeardownTool(Tool):
     ) -> TeardownResult:
         entry, registry, workspace_path = _resolve_or_create(workspace)
 
-        do_stop(workspace_path, entry, _NullConsole())
+        _do_stop(workspace_path, _NullConsole())
         autostart_removed = _unregister_autostart(entry.name, elevated_task)
 
         if purge:
@@ -431,7 +553,7 @@ class UninstallTool(Tool):
 
 
 # ---------------------------------------------------------------------------
-# Internal: null console for do_start / do_stop (output handled by CLI layer)
+# Internal: null console for _do_start / _do_stop (output handled by CLI layer)
 # ---------------------------------------------------------------------------
 
 

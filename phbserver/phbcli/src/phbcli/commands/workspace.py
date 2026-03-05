@@ -24,7 +24,7 @@ from ..tools.workspace import (
     WorkspaceSetDefaultTool,
     WorkspaceShowTool,
 )
-from ..workspace import WorkspaceError
+from ..domain.workspace import WorkspaceError
 
 
 def register(workspace_app: typer.Typer, console: Console) -> None:

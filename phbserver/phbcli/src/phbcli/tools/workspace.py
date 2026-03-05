@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from ..workspace import (
+from ..domain.workspace import (
     WorkspaceError,
     create_workspace,
     gateway_port_for,

@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.table import Table
 
 from ..tools.device import DeviceAddTool, DeviceListTool, DeviceRevokeTool
-from ..workspace import WorkspaceError
+from ..domain.workspace import WorkspaceError
 
 
 def register(device_app: typer.Typer, console: Console) -> None:

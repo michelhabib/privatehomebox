@@ -25,7 +25,7 @@ from typing import TYPE_CHECKING
 from phb_channel_sdk.models import UnifiedMessage
 from phb_commons.log import Logger
 
-from .agent_config import load_agent_config, load_system_prompt
+from ..domain.agent_config import load_agent_config, load_system_prompt
 
 if TYPE_CHECKING:
     from .communication_manager import CommunicationManager
@@ -74,7 +74,7 @@ class AgentManager:
         from langchain.chat_models import init_chat_model
         from langgraph.checkpoint.memory import InMemorySaver
 
-        from .tools import (
+        from ..tools import (
             ChannelDisableTool,
             ChannelEnableTool,
             ChannelInstallTool,
@@ -90,7 +90,7 @@ class AgentManager:
             WorkspaceSetDefaultTool,
             WorkspaceShowTool,
         )
-        from .tools.langchain_adapter import to_langchain_list
+        from ..tools.langchain_adapter import to_langchain_list
 
         config = load_agent_config(self._workspace_path)
         system_prompt = load_system_prompt(self._workspace_path)

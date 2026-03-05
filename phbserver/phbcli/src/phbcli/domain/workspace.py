@@ -31,7 +31,7 @@ from phb_commons.constants.domain import DEFAULT_WORKSPACE_NAME
 from phb_commons.constants.network import PORT_RANGE_START, PORTS_PER_SLOT
 from phb_commons.constants.storage import REGISTRY_FILENAME
 
-from .constants import APP_NAME, ENV_WORKSPACE
+from ..constants import APP_NAME, ENV_WORKSPACE
 
 
 class WorkspaceError(Exception):

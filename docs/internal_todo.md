@@ -5,6 +5,9 @@
 - Move Docs to Mintdocs.
 - Move all CLI commands to new tool design
 
+# Refactoring
+- Refactor phbcli into organized folders - runtime/tools/commands/services/domain
+
 # Add Features
 - security policy
 - add browser tool

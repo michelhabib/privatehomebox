@@ -17,7 +17,7 @@ from ..tools.server import (
     TeardownTool,
     UninstallTool,
 )
-from ..workspace import WorkspaceError
+from ..domain.workspace import WorkspaceError
 
 
 def register(app: typer.Typer, console: Console) -> None:
@@ -47,9 +47,8 @@ def register(app: typer.Typer, console: Console) -> None:
         """One-time setup: configure gateway, generate device ID, register auto-start."""
         console.print("[bold cyan]phbcli setup[/bold cyan]")
 
-        # Resolve existing config to offer a default for the gateway URL prompt.
-        from ..workspace import WorkspaceError as _WE, resolve_workspace as _resolve
-        from ..config import load_config as _load_config
+        from ..domain.workspace import WorkspaceError as _WE, resolve_workspace as _resolve
+        from ..domain.config import load_config as _load_config
 
         try:
             entry, _ = _resolve(workspace)

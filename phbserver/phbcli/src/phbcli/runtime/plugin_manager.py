@@ -47,9 +47,9 @@ from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
 from phb_commons.constants.network import DEFAULT_LOCALHOST
 from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
 
-from .channel_config import ChannelConfig, list_enabled_channels, load_channel_config
-from .config import Config, resolve_log_dir
-from . import rpc_helpers as rpc
+from ..domain.channel_config import ChannelConfig, list_enabled_channels, load_channel_config
+from ..domain.config import Config, resolve_log_dir
+from .. import rpc_helpers as rpc
 
 log = Logger.get("PLUGINS")
 
@@ -395,4 +395,3 @@ class PluginManager:
             }
             for ch in self._channels.values()
         ]
-
