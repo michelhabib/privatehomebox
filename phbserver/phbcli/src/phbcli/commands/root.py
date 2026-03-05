@@ -9,62 +9,15 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from phb_commons.keys import public_key_to_b64
-from phb_commons.process import is_running, read_pid
-
-from ..config import Config, load_config, load_state, master_key_path, save_config
-from ..crypto import load_or_create_master_key
-from ..services.autostart_feedback import (
-    register_autostart_with_feedback,
-    unregister_autostart_with_feedback,
+from ..tools.server import (
+    SetupTool,
+    StartTool,
+    StatusTool,
+    StopTool,
+    TeardownTool,
+    UninstallTool,
 )
-from ..services.bootstrap import ensure_mandatory_devices_channel
-from ..services.server_control import do_start, do_stop
-from ..workspace import (
-    WorkspaceError,
-    WorkspaceRegistry,
-    create_workspace,
-    http_port_for,
-    load_registry,
-    plugin_port_for,
-    resolve_workspace,
-)
-
-
-def _resolve_or_create_default(
-    workspace: str | None,
-    console: Console,
-) -> tuple[object, WorkspaceRegistry, Path]:
-    """Resolve a workspace entry and return (entry, registry, workspace_path).
-
-    If no workspaces exist and workspace is None, auto-creates 'default'.
-    Calls typer.Exit(1) on unresolvable errors.
-    """
-    try:
-        entry, registry = resolve_workspace(workspace)
-        return entry, registry, Path(entry.path)
-    except WorkspaceError:
-        if workspace is not None:
-            # Caller asked for a specific workspace that does not exist.
-            console.print(
-                f"[red]Workspace '{workspace}' not found. "
-                "Run [bold]phbcli workspace list[/bold] to see available workspaces.[/red]"
-            )
-            raise typer.Exit(1)
-
-        # No workspaces at all — auto-create 'default'.
-        console.print(
-            "[dim]No workspaces found. Creating workspace '[bold]default[/bold]'…[/dim]"
-        )
-        try:
-            entry, registry = create_workspace("default")
-        except WorkspaceError as exc:
-            console.print(f"[red]Failed to create default workspace: {exc}[/red]")
-            raise typer.Exit(1)
-        console.print(
-            f"[green]Workspace 'default' created[/green] at {entry.path}"
-        )
-        return entry, registry, Path(entry.path)
+from ..workspace import WorkspaceError
 
 
 def register(app: typer.Typer, console: Console) -> None:
@@ -94,51 +47,66 @@ def register(app: typer.Typer, console: Console) -> None:
         """One-time setup: configure gateway, generate device ID, register auto-start."""
         console.print("[bold cyan]phbcli setup[/bold cyan]")
 
-        entry, registry, workspace_path = _resolve_or_create_default(workspace, console)
+        # Resolve existing config to offer a default for the gateway URL prompt.
+        from ..workspace import WorkspaceError as _WE, resolve_workspace as _resolve
+        from ..config import load_config as _load_config
 
-        existing = load_config(workspace_path)
+        try:
+            entry, _ = _resolve(workspace)
+            existing = _load_config(Path(entry.path))
+            default_gw = existing.gateway_url
+        except _WE:
+            default_gw = "ws://localhost:8765"
 
         effective_gateway_url = gateway_url
         if effective_gateway_url is None:
-            default_gw = existing.gateway_url
             effective_gateway_url = typer.prompt(
                 "Gateway WebSocket URL",
                 default=default_gw,
             )
 
-        effective_http_port = http_port or http_port_for(registry, entry.port_slot)
-        effective_plugin_port = plugin_port_for(registry, entry.port_slot)
+        try:
+            result = SetupTool().execute(
+                gateway_url=effective_gateway_url,
+                workspace=workspace,
+                http_port=http_port,
+                skip_autostart=skip_autostart,
+                elevated_task=elevated_task,
+            )
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
 
-        config = Config(
-            device_id=existing.device_id,
-            gateway_url=effective_gateway_url,
-            http_host=existing.http_host,
-            http_port=effective_http_port,
-            plugin_port=effective_plugin_port,
-            master_key_file=existing.master_key_file,
-            pairing_code_length=existing.pairing_code_length,
-            pairing_code_ttl_seconds=existing.pairing_code_ttl_seconds,
-            attestation_expires_days=existing.attestation_expires_days,
-        )
-        save_config(workspace_path, config)
-        private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
-        public_key_b64 = public_key_to_b64(private_key.public_key())
-        ensure_mandatory_devices_channel(workspace_path, config)
-
-        console.print(f"[green]Config saved to[/green] {workspace_path / 'config.json'}")
-        console.print(f"  workspace  : [bold]{entry.name}[/bold]")
-        console.print(f"  device_id  : [bold]{config.device_id}[/bold]")
-        console.print(f"  gateway_url: [bold]{config.gateway_url}[/bold]")
-        console.print(f"  http_port  : [bold]{config.http_port}[/bold]")
-        console.print(f"  master_key : [bold]{master_key_path(workspace_path, config)}[/bold]")
-        console.print(f"  desktop_pub: [bold]{public_key_b64}[/bold]")
+        console.print(f"[green]Config saved to[/green] {result.workspace_path}/config.json")
+        console.print(f"  workspace  : [bold]{result.workspace}[/bold]")
+        console.print(f"  device_id  : [bold]{result.device_id}[/bold]")
+        console.print(f"  gateway_url: [bold]{result.gateway_url}[/bold]")
+        console.print(f"  http_port  : [bold]{result.http_port}[/bold]")
+        console.print(f"  master_key : [bold]{result.master_key}[/bold]")
+        console.print(f"  desktop_pub: [bold]{result.desktop_pub}[/bold]")
         console.print("  channel    : [bold]devices[/bold] (mandatory)")
 
-        if not skip_autostart:
-            register_autostart_with_feedback(console, entry.name, elevated=elevated_task)
+        if result.autostart_registered:
+            method = result.autostart_method
+            if method == "elevated":
+                console.print(
+                    "[green]Auto-start registered[/green] via Task Scheduler "
+                    "(elevated, run-level: HIGHEST)."
+                )
+            elif method == "schtasks":
+                console.print(
+                    "[green]Auto-start registered[/green] via Task Scheduler "
+                    "(run-level: LIMITED, no elevation needed)."
+                )
+            elif method == "registry":
+                console.print(
+                    "[green]Auto-start registered[/green] via Registry Run key "
+                    "[dim](Task Scheduler was unavailable — registry fallback used)[/dim]."
+                )
+        elif result.autostart_method == "failed":
+            console.print("[yellow]Auto-start registration failed.[/yellow]")
 
         console.print("\nStarting server…")
-        do_start(workspace_path, entry, registry, config, console, foreground=False)
 
     @app.command()
     def start(
@@ -155,17 +123,22 @@ def register(app: typer.Typer, console: Console) -> None:
         ),
     ) -> None:
         """Start the phbcli server (background by default, foreground with -f)."""
-        entry, registry, workspace_path = _resolve_or_create_default(workspace, console)
-
-        if not (workspace_path / "config.json").exists():
-            console.print(
-                "[red]Workspace not configured. "
-                f"Run [bold]phbcli setup --workspace {entry.name}[/bold] first.[/red]"
-            )
+        try:
+            result = StartTool().execute(workspace=workspace, foreground=foreground)
+        except ValueError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
 
-        config = load_config(workspace_path)
-        do_start(workspace_path, entry, registry, config, console, foreground=foreground)
+        if result.already_running:
+            console.print(f"[yellow]Server already running (PID {result.pid}).[/yellow]")
+        else:
+            console.print(
+                f"[green]Server started[/green] (PID {result.pid}). "
+                f"HTTP: http://{result.http_host}:{result.http_port}/status"
+            )
 
     @app.command()
     def stop(
@@ -175,8 +148,16 @@ def register(app: typer.Typer, console: Console) -> None:
         ),
     ) -> None:
         """Stop the running phbcli server."""
-        entry, registry, workspace_path = _resolve_or_create_default(workspace, console)
-        do_stop(workspace_path, entry, console)
+        try:
+            result = StopTool().execute(workspace=workspace)
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
+
+        if result.was_running:
+            console.print(f"[green]Server stopped[/green] (was PID {result.pid}).")
+        else:
+            console.print("[yellow]Server is not running.[/yellow]")
 
     @app.command()
     def status(
@@ -186,27 +167,19 @@ def register(app: typer.Typer, console: Console) -> None:
         ),
     ) -> None:
         """Show server and WebSocket connection status."""
-        registry = load_registry()
+        try:
+            result = StatusTool().execute(workspace=workspace)
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
+            raise typer.Exit(1)
 
-        if not registry.workspaces:
+        if not result.workspaces:
             console.print("[dim]No workspaces configured.[/dim]")
             return
 
-        # If --workspace is given, show just that one in detail.
-        if workspace is not None:
-            if workspace not in registry.workspaces:
-                console.print(f"[red]Workspace '{workspace}' not found.[/red]")
-                raise typer.Exit(1)
-            _print_workspace_status(console, registry, workspace)
-            return
-
-        # No --workspace: show a summary of all workspaces.
-        if len(registry.workspaces) == 1:
-            only = next(iter(registry.workspaces))
-            _print_workspace_status(console, registry, only)
-        else:
-            for name in registry.workspaces:
-                _print_workspace_status(console, registry, name)
+        for ws in result.workspaces:
+            _print_workspace_status_entry(console, ws)
+            if len(result.workspaces) > 1:
                 console.print()
 
     @app.command()
@@ -228,26 +201,23 @@ def register(app: typer.Typer, console: Console) -> None:
         console.print("[bold cyan]phbcli teardown[/bold cyan]")
 
         try:
-            entry, registry, workspace_path = _resolve_or_create_default(workspace, console)
-        except SystemExit:
+            result = TeardownTool().execute(
+                workspace=workspace,
+                purge=purge,
+                elevated_task=elevated_task,
+            )
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
             return
 
-        do_stop(workspace_path, entry, console)
-        unregister_autostart_with_feedback(console, entry.name, elevated=elevated_task)
+        if result.autostart_removed:
+            console.print("[green]Auto-start removed[/green] (Task Scheduler + Registry).")
+        else:
+            console.print("[yellow]Auto-start removal failed or skipped.[/yellow]")
 
         if purge:
-            import shutil as _shutil
-            if workspace_path.exists():
-                _shutil.rmtree(workspace_path, ignore_errors=True)
-                console.print(f"[green]Workspace folder removed:[/green] {workspace_path}")
-
-            # Also remove from registry.
-            from ..workspace import remove_workspace
-            try:
-                remove_workspace(entry.name, purge=False)
-                console.print(f"[green]Workspace '{entry.name}' removed from registry.[/green]")
-            except WorkspaceError:
-                pass
+            console.print(f"[green]Workspace folder removed:[/green] {result.workspace_path}")
+            console.print(f"[green]Workspace '{result.workspace}' removed from registry.[/green]")
 
         console.print("\n[green]Teardown complete.[/green]")
 
@@ -264,9 +234,27 @@ def register(app: typer.Typer, console: Console) -> None:
         ),
     ) -> None:
         """Stop server, remove auto-start, then print package uninstall commands."""
-        import click
-        ctx = click.get_current_context()
-        ctx.invoke(teardown, workspace=workspace, purge=purge, elevated_task=elevated_task)
+        console.print("[bold cyan]phbcli teardown[/bold cyan]")
+
+        try:
+            result = UninstallTool().execute(
+                workspace=workspace,
+                purge=purge,
+                elevated_task=elevated_task,
+            )
+        except WorkspaceError as exc:
+            console.print(f"[red]{exc}[/red]")
+            return
+
+        td = result.teardown
+        if td.autostart_removed:
+            console.print("[green]Auto-start removed[/green] (Task Scheduler + Registry).")
+        else:
+            console.print("[yellow]Auto-start removal failed or skipped.[/yellow]")
+
+        if purge:
+            console.print(f"[green]Workspace folder removed:[/green] {td.workspace_path}")
+            console.print(f"[green]Workspace '{td.workspace}' removed from registry.[/green]")
 
         console.print(
             "\n[bold]To fully remove phbcli, run one of:[/bold]\n"
@@ -275,38 +263,33 @@ def register(app: typer.Typer, console: Console) -> None:
         )
 
 
-def _print_workspace_status(
+def _print_workspace_status_entry(
     console: Console,
-    registry: WorkspaceRegistry,
-    name: str,
+    ws: object,
 ) -> None:
-    entry = registry.workspaces[name]
-    workspace_path = Path(entry.path)
-    pid = read_pid(workspace_path, "phbcli.pid")
-    running = is_running(pid)
-    state = load_state(workspace_path)
-    config = load_config(workspace_path)
+    from ..tools.server import WorkspaceStatusEntry
+    assert isinstance(ws, WorkspaceStatusEntry)
 
-    title = f"phbcli status — {name}"
-    if name == registry.default_workspace:
+    title = f"phbcli status — {ws.name}"
+    if ws.is_default:
         title += " [cyan](default)[/cyan]"
 
     table = Table(title=title, show_header=False, box=None, padding=(0, 2))
     table.add_column("Key", style="bold")
     table.add_column("Value")
 
-    table.add_row("Server running", "[green]yes[/green]" if running else "[red]no[/red]")
-    table.add_row("PID", str(pid) if pid else "—")
+    table.add_row("Server running", "[green]yes[/green]" if ws.server_running else "[red]no[/red]")
+    table.add_row("PID", str(ws.pid) if ws.pid else "—")
     table.add_row(
         "WS connected",
-        "[green]yes[/green]" if state.ws_connected else "[red]no[/red]",
+        "[green]yes[/green]" if ws.ws_connected else "[red]no[/red]",
     )
-    table.add_row("Last connected", state.last_connected or "—")
-    table.add_row("Gateway URL", state.gateway_url or config.gateway_url or "—")
-    table.add_row("Device ID", config.device_id)
+    table.add_row("Last connected", ws.last_connected or "—")
+    table.add_row("Gateway URL", ws.gateway_url or "—")
+    table.add_row("Device ID", ws.device_id)
     table.add_row(
         "HTTP API",
-        f"http://{config.http_host}:{config.http_port}/status" if running else "—",
+        f"http://{ws.http_host}:{ws.http_port}/status" if ws.server_running else "—",
     )
 
     console.print(table)

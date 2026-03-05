@@ -84,6 +84,11 @@ class AgentManager:
             DeviceAddTool,
             DeviceListTool,
             DeviceRevokeTool,
+            WorkspaceCreateTool,
+            WorkspaceListTool,
+            WorkspaceRemoveTool,
+            WorkspaceSetDefaultTool,
+            WorkspaceShowTool,
         )
         from .tools.langchain_adapter import to_langchain_list
 
@@ -113,6 +118,11 @@ class AgentManager:
             ChannelEnableTool(),
             ChannelDisableTool(),
             ChannelRemoveTool(),
+            WorkspaceListTool(),
+            WorkspaceCreateTool(),
+            WorkspaceRemoveTool(),
+            WorkspaceSetDefaultTool(),
+            WorkspaceShowTool(),
         ])
 
         return create_agent(

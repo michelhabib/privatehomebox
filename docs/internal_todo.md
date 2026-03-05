@@ -1,11 +1,16 @@
 
 # Daily Tasks
 - add versioning.
-- separate cli from functionality, and allow an api for the website.
 - Log what really matters
 - Move Docs to Mintdocs.
+- Move all CLI commands to new tool design
 
 # Add Features
+- security policy
+- add browser tool
+- install tools as plugins
+- Add Memory
+- Add RAG
 
 # Iterations
 
@@ -63,4 +68,5 @@
 - Add xLogger Custom Logging module for better terminal tracking.
 - introduce workspace concept for better organization of config files.
 - introduce gateway instances concept for better organization of gateway config files.
+- (tool-architecture) separate cli from functionality, and allow an api for the website.
  

@@ -1,4 +1,4 @@
-"""Workspace management subcommands.
+"""Workspace management subcommands — thin CLI layer over workspace tools.
 
 phbcli workspace list
 phbcli workspace create <name> [--path P] [--set-default]
@@ -10,23 +10,21 @@ phbcli workspace show [<name>]
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Optional
 
 import typer
 from phb_commons.process import is_running, read_pid
 from rich.console import Console
 from rich.table import Table
 
-from ..workspace import (
-    WorkspaceError,
-    create_workspace,
-    gateway_port_for,
-    http_port_for,
-    load_registry,
-    plugin_port_for,
-    remove_workspace,
-    resolve_workspace,
-    set_default_workspace,
+from ..tools.workspace import (
+    WorkspaceCreateTool,
+    WorkspaceListTool,
+    WorkspaceRemoveTool,
+    WorkspaceSetDefaultTool,
+    WorkspaceShowTool,
 )
+from ..workspace import WorkspaceError
 
 
 def register(workspace_app: typer.Typer, console: Console) -> None:
@@ -35,8 +33,9 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
     @workspace_app.command("list")
     def workspace_list() -> None:
         """List all configured workspaces."""
-        registry = load_registry()
-        if not registry.workspaces:
+        result = WorkspaceListTool().execute()
+
+        if not result.workspaces:
             console.print(
                 "[dim]No workspaces configured. "
                 "Run [bold]phbcli workspace create <name>[/bold] to get started.[/dim]"
@@ -50,15 +49,15 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         table.add_column("HTTP")
         table.add_column("Path")
 
-        for name, entry in registry.workspaces.items():
-            workspace_path = Path(entry.path)
+        for ws in result.workspaces:
+            workspace_path = Path(ws["path"])
             pid = read_pid(workspace_path, "phbcli.pid")
             running = is_running(pid)
 
-            default_marker = "[cyan]*[/cyan]" if name == registry.default_workspace else ""
+            default_marker = "[cyan]*[/cyan]" if ws["is_default"] else ""
             status = "[green]running[/green]" if running else "[dim]stopped[/dim]"
-            http_str = f":{http_port_for(registry, entry.port_slot)}"
-            table.add_row(default_marker, name, status, http_str, entry.path)
+            http_str = f":{ws['http_port']}"
+            table.add_row(default_marker, ws["name"], status, http_str, ws["path"])
 
         console.print(table)
         console.print("\n[cyan]*[/cyan] = default workspace")
@@ -66,7 +65,7 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
     @workspace_app.command("create")
     def workspace_create(
         name: str = typer.Argument(..., help="Workspace name (e.g. 'default', 'work')"),
-        path: str = typer.Option(
+        path: Optional[str] = typer.Option(
             None, "--path", "-p",
             help="Custom folder path. Defaults to the platform data dir.",
         ),
@@ -76,33 +75,26 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         ),
     ) -> None:
         """Create a new workspace."""
-        custom_path = Path(path) if path else None
         try:
-            entry, registry = create_workspace(
-                name, path=custom_path
+            result = WorkspaceCreateTool().execute(
+                name=name,
+                path=path,
+                set_default=make_default,
             )
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
 
-        if make_default:
-            set_default_workspace(name)
-            registry = load_registry()
+        console.print(f"[green]Workspace '[bold]{result.name}[/bold]' created.[/green]")
+        console.print(f"  path         : [bold]{result.path}[/bold]")
+        console.print(f"  http_port    : [bold]{result.http_port}[/bold]")
+        console.print(f"  plugin_port  : [bold]{result.plugin_port}[/bold]")
+        console.print(f"  gateway_port : [bold]{result.gateway_port}[/bold]  (external)")
 
-        http = http_port_for(registry, entry.port_slot)
-        plugin = plugin_port_for(registry, entry.port_slot)
-        gw = gateway_port_for(registry, entry.port_slot)
-
-        console.print(f"[green]Workspace '[bold]{name}[/bold]' created.[/green]")
-        console.print(f"  path         : [bold]{entry.path}[/bold]")
-        console.print(f"  http_port    : [bold]{http}[/bold]")
-        console.print(f"  plugin_port  : [bold]{plugin}[/bold]")
-        console.print(f"  gateway_port : [bold]{gw}[/bold]  (external)")
-
-        if name == registry.default_workspace:
+        if result.is_default:
             console.print("  [cyan]Set as default workspace.[/cyan]")
 
-        console.print(f"\nNext: [bold]phbcli setup --workspace {name}[/bold]")
+        console.print(f"\nNext: [bold]phbcli setup --workspace {result.name}[/bold]")
 
     @workspace_app.command("remove")
     def workspace_remove(
@@ -120,13 +112,13 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
                 f"Are you sure you want to {action} workspace '{name}'?", abort=True
             )
         try:
-            remove_workspace(name, purge=purge)
+            result = WorkspaceRemoveTool().execute(name=name, purge=purge)
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
 
-        console.print(f"[green]Workspace '[bold]{name}[/bold]' removed.[/green]")
-        if purge:
+        console.print(f"[green]Workspace '[bold]{result.name}[/bold]' removed.[/green]")
+        if result.purged:
             console.print("  Workspace folder deleted from disk.")
 
     @workspace_app.command("set-default")
@@ -135,38 +127,34 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
     ) -> None:
         """Set the default workspace used when --workspace is not specified."""
         try:
-            set_default_workspace(name)
+            result = WorkspaceSetDefaultTool().execute(name=name)
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
 
         console.print(
-            f"[green]Default workspace set to '[bold]{name}[/bold]'.[/green]"
+            f"[green]Default workspace set to '[bold]{result.name}[/bold]'.[/green]"
         )
 
     @workspace_app.command("show")
     def workspace_show(
-        name: str = typer.Argument(
+        name: Optional[str] = typer.Argument(
             None, help="Workspace name (omit to show the default)"
         ),
     ) -> None:
         """Show details of a workspace."""
         try:
-            entry, registry = resolve_workspace(name)
+            result = WorkspaceShowTool().execute(name=name)
         except WorkspaceError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
 
-        workspace_path = Path(entry.path)
+        workspace_path = Path(result.path)
         pid = read_pid(workspace_path, "phbcli.pid")
         running = is_running(pid)
 
-        http = http_port_for(registry, entry.port_slot)
-        plugin = plugin_port_for(registry, entry.port_slot)
-        gw = gateway_port_for(registry, entry.port_slot)
-
         table = Table(
-            title=f"Workspace: {entry.name}",
+            title=f"Workspace: {result.name}",
             show_header=False,
             box=None,
             padding=(0, 2),
@@ -174,19 +162,17 @@ def register(workspace_app: typer.Typer, console: Console) -> None:
         table.add_column("Key", style="bold")
         table.add_column("Value")
 
-        table.add_row("Name", entry.name)
-        table.add_row("Path", entry.path)
-        table.add_row(
-            "Default", "[cyan]yes[/cyan]" if entry.name == registry.default_workspace else "no"
-        )
+        table.add_row("Name", result.name)
+        table.add_row("Path", result.path)
+        table.add_row("Default", "[cyan]yes[/cyan]" if result.is_default else "no")
         table.add_row(
             "Server",
             f"[green]running[/green] (PID {pid})" if running else "[dim]stopped[/dim]",
         )
-        table.add_row("HTTP port", str(http))
-        table.add_row("Plugin port", str(plugin))
-        table.add_row("Gateway port", str(gw))
+        table.add_row("HTTP port", str(result.http_port))
+        table.add_row("Plugin port", str(result.plugin_port))
+        table.add_row("Gateway port", str(result.gateway_port))
         table.add_row("Gateway", "[dim]external (not managed by phbcli)[/dim]")
-        table.add_row("Port slot", str(entry.port_slot))
+        table.add_row("Port slot", str(result.port_slot))
 
         console.print(table)

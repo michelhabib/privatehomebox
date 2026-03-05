@@ -88,6 +88,17 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
         DeviceAddTool,
         DeviceListTool,
         DeviceRevokeTool,
+        SetupTool,
+        StartTool,
+        StatusTool,
+        StopTool,
+        TeardownTool,
+        UninstallTool,
+        WorkspaceCreateTool,
+        WorkspaceListTool,
+        WorkspaceRemoveTool,
+        WorkspaceSetDefaultTool,
+        WorkspaceShowTool,
     )
     from phbcli.tools.registry import ToolRegistry
 
@@ -114,6 +125,17 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     tool_registry.register(ChannelEnableTool())
     tool_registry.register(ChannelDisableTool())
     tool_registry.register(ChannelRemoveTool())
+    tool_registry.register(WorkspaceListTool())
+    tool_registry.register(WorkspaceCreateTool())
+    tool_registry.register(WorkspaceRemoveTool())
+    tool_registry.register(WorkspaceSetDefaultTool())
+    tool_registry.register(WorkspaceShowTool())
+    tool_registry.register(SetupTool())
+    tool_registry.register(StartTool())
+    tool_registry.register(StopTool())
+    tool_registry.register(StatusTool())
+    tool_registry.register(TeardownTool())
+    tool_registry.register(UninstallTool())
     set_tool_registry(tool_registry)
 
     plugin_manager: PluginManager | None = None

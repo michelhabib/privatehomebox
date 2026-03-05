@@ -7,6 +7,21 @@ from .channel import (
     ChannelSetupTool,
 )
 from .device import DeviceAddTool, DeviceListTool, DeviceRevokeTool
+from .server import (
+    SetupTool,
+    StartTool,
+    StatusTool,
+    StopTool,
+    TeardownTool,
+    UninstallTool,
+)
+from .workspace import (
+    WorkspaceCreateTool,
+    WorkspaceListTool,
+    WorkspaceRemoveTool,
+    WorkspaceSetDefaultTool,
+    WorkspaceShowTool,
+)
 
 __all__ = [
     "DeviceAddTool",
@@ -18,4 +33,15 @@ __all__ = [
     "ChannelEnableTool",
     "ChannelDisableTool",
     "ChannelRemoveTool",
+    "WorkspaceListTool",
+    "WorkspaceCreateTool",
+    "WorkspaceRemoveTool",
+    "WorkspaceSetDefaultTool",
+    "WorkspaceShowTool",
+    "SetupTool",
+    "StartTool",
+    "StopTool",
+    "StatusTool",
+    "TeardownTool",
+    "UninstallTool",
 ]
