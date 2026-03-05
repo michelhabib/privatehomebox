@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
+
 from ..channel_config import (
     ChannelConfig,
     find_workspace_root,
@@ -12,7 +15,7 @@ from ..channel_config import (
 )
 from ..config import Config, master_key_path
 
-MANDATORY_CHANNEL = "devices"
+MANDATORY_CHANNEL = MANDATORY_CHANNEL_NAME
 
 
 def ensure_mandatory_devices_channel(workspace_path: Path, config: Config) -> None:
@@ -31,7 +34,7 @@ def ensure_mandatory_devices_channel(workspace_path: Path, config: Config) -> No
             "gateway_url": config.gateway_url,
             "device_id": config.device_id,
             "master_key_path": str(master_key_path(workspace_path, config)),
-            "ping_interval": (existing.config.get("ping_interval", 30) if existing else 30),
+            "ping_interval": (existing.config.get("ping_interval", DEFAULT_PING_INTERVAL_SECONDS) if existing else DEFAULT_PING_INTERVAL_SECONDS),
         },
         workspace_dir=workspace_dir,
     )

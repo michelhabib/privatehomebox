@@ -28,11 +28,23 @@ from phb_commons.log import Logger
 
 from . import rpc
 from .base import ChannelPlugin
+from .constants import (
+    JSONRPC_ERROR_INTERNAL,
+    JSONRPC_ERROR_METHOD_NOT_FOUND,
+    METHOD_CONFIGURE,
+    METHOD_EVENT,
+    METHOD_RECEIVE,
+    METHOD_REGISTER,
+    METHOD_SEND,
+    METHOD_STATUS,
+    METHOD_STOP,
+    RECONNECT_DELAY_SECONDS,
+)
 from .models import RpcRequest, RpcResponse, UnifiedMessage
 
 log = Logger.get("TRANSPORT")
 
-RECONNECT_DELAY = 5.0  # seconds before retrying connection to phbcli
+RECONNECT_DELAY = RECONNECT_DELAY_SECONDS
 
 
 class PluginTransport:
@@ -94,7 +106,7 @@ class PluginTransport:
 
             await ws.send(
                 rpc.build_notification(
-                    "channel.register",
+                    METHOD_REGISTER,
                     {
                         "name": self._plugin.info.name,
                         "version": self._plugin.info.version,
@@ -105,7 +117,7 @@ class PluginTransport:
             log.info("Channel registered with phbcli", channel=self._plugin.info.name)
 
             async def _forward_inbound(msg: UnifiedMessage) -> None:
-                await self._notify("channel.receive", msg.model_dump(mode="json"))
+                await self._notify(METHOD_RECEIVE, msg.model_dump(mode="json"))
 
             self._plugin._emit_callback = _forward_inbound
             self._plugin._event_callback = self._notify_event
@@ -152,33 +164,33 @@ class PluginTransport:
 
         try:
             match req.method:
-                case "channel.send":
+                case _ if req.method == METHOD_SEND:
                     msg = UnifiedMessage.model_validate(req.params)
                     await self._plugin.send(msg)
                     result = {"ok": True}
 
-                case "channel.configure":
+                case _ if req.method == METHOD_CONFIGURE:
                     await self._plugin.on_configure(req.params.get("config", {}))
                     if not self._started:
                         await self._plugin.on_start()
                         self._started = True
                     result = {"ok": True}
 
-                case "channel.event":
+                case _ if req.method == METHOD_EVENT:
                     event = req.params.get("event")
                     data = req.params.get("data", {})
                     if not isinstance(event, str) or not event:
-                        raise ValueError("channel.event requires params.event")
+                        raise ValueError(f"{METHOD_EVENT} requires params.event")
                     if not isinstance(data, dict):
-                        raise ValueError("channel.event params.data must be an object")
+                        raise ValueError(f"{METHOD_EVENT} params.data must be an object")
                     await self._plugin.on_event(event, data)
                     result = {"ok": True}
 
-                case "channel.stop":
+                case _ if req.method == METHOD_STOP:
                     self._stop_event.set()
                     result = {"ok": True}
 
-                case "channel.status":
+                case _ if req.method == METHOD_STATUS:
                     result = {
                         "name": self._plugin.info.name,
                         "version": self._plugin.info.version,
@@ -187,7 +199,7 @@ class PluginTransport:
 
                 case _:
                     error = {
-                        "code": -32601,
+                        "code": JSONRPC_ERROR_METHOD_NOT_FOUND,
                         "message": f"Method not found: {req.method}",
                     }
 
@@ -198,7 +210,7 @@ class PluginTransport:
                 error=str(exc),
                 exc_info=True,
             )
-            error = {"code": -32603, "message": str(exc)}
+            error = {"code": JSONRPC_ERROR_INTERNAL, "message": str(exc)}
 
         if req.id is not None and self._ws is not None:
             if error:
@@ -217,7 +229,7 @@ class PluginTransport:
             await self._ws.send(rpc.build_notification(method, params))
 
     async def _notify_event(self, event: str, data: dict[str, Any]) -> None:
-        await self._notify("channel.event", {"event": event, "data": data})
+        await self._notify(METHOD_EVENT, {"event": event, "data": data})
 
     async def request(
         self, method: str, params: dict[str, Any] | None = None

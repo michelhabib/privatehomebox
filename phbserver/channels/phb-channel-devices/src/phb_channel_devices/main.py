@@ -7,10 +7,13 @@ from pathlib import Path
 
 import typer
 from phb_channel_sdk import PluginTransport, log_setup
+from phb_commons.constants.network import DEFAULT_LOCALHOST, PORT_OFFSET_PLUGIN, PORT_RANGE_START
+from phb_commons.constants.storage import LOGS_DIR
 
 from .plugin import DevicesChannel
 
-_DEFAULT_LOG_DIR = str(Path.home() / ".phbcli" / "logs")
+_DEFAULT_LOG_DIR = str(Path.home() / ".phbcli" / LOGS_DIR)
+_DEFAULT_PLUGIN_WS = f"ws://{DEFAULT_LOCALHOST}:{PORT_RANGE_START + PORT_OFFSET_PLUGIN}"
 
 app = typer.Typer(
     name="phb-channel-devices",
@@ -22,7 +25,7 @@ app = typer.Typer(
 @app.command()
 def run(
     phb_ws: str = typer.Option(
-        "ws://127.0.0.1:18081",
+        _DEFAULT_PLUGIN_WS,
         "--phb-ws",
         help="WebSocket URL of phbcli plugin server.",
         envvar="PHB_WS",

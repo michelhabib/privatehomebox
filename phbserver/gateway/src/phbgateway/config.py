@@ -6,6 +6,8 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
+from phb_commons.constants.storage import CONFIG_FILENAME, LOGS_DIR
+
 
 class GatewayConfig(BaseModel):
     desktop_public_key: str
@@ -13,11 +15,11 @@ class GatewayConfig(BaseModel):
 
 
 def instance_config_file(instance_path: Path) -> Path:
-    return instance_path / "config.json"
+    return instance_path / CONFIG_FILENAME
 
 
 def instance_log_dir(instance_path: Path) -> Path:
-    return instance_path / "logs"
+    return instance_path / LOGS_DIR
 
 
 def resolve_log_dir(instance_path: Path, config: GatewayConfig) -> Path:

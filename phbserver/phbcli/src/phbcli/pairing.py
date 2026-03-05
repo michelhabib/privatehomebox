@@ -15,6 +15,9 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
+from phb_commons.constants.domain import DEFAULT_PAIRING_CODE_LENGTH, DEFAULT_PAIRING_CODE_TTL_SECONDS
+from phb_commons.constants.storage import APPROVED_DEVICES_FILENAME, PAIRING_SESSION_FILENAME
+
 
 class PairingSession(BaseModel):
     code: str
@@ -52,24 +55,24 @@ class ApprovedDevice(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _pairing_session_file(workspace_path: Path) -> Path:
-    return workspace_path / "pairing_session.json"
+    return workspace_path / PAIRING_SESSION_FILENAME
 
 
 def _approved_devices_file(workspace_path: Path) -> Path:
-    return workspace_path / "devices.json"
+    return workspace_path / APPROVED_DEVICES_FILENAME
 
 
 # ---------------------------------------------------------------------------
 # Pairing code
 # ---------------------------------------------------------------------------
 
-def generate_pairing_code(length: int = 6) -> str:
+def generate_pairing_code(length: int = DEFAULT_PAIRING_CODE_LENGTH) -> str:
     if length <= 0:
         raise ValueError("pairing code length must be > 0")
     return "".join(str(secrets.randbelow(10)) for _ in range(length))
 
 
-def create_pairing_session(code_length: int = 6, ttl_seconds: int = 300) -> PairingSession:
+def create_pairing_session(code_length: int = DEFAULT_PAIRING_CODE_LENGTH, ttl_seconds: int = DEFAULT_PAIRING_CODE_TTL_SECONDS) -> PairingSession:
     if ttl_seconds <= 0:
         raise ValueError("pairing code ttl_seconds must be > 0")
     return PairingSession(

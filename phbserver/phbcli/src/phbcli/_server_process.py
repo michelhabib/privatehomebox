@@ -24,6 +24,8 @@ from pathlib import Path
 from phb_commons.log import Logger
 from phb_commons.process import write_pid
 
+from phbcli.constants import DEVICE_ID_PREFIX, DEVICE_ID_SUFFIX_LENGTH, ENV_WORKSPACE_PATH, PID_FILENAME
+
 log = Logger.get("SERVER")
 
 
@@ -54,7 +56,7 @@ async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
 
 async def _main(foreground: bool = False, workspace_path: Path | None = None) -> None:
     if workspace_path is None:
-        ws_str = os.environ.get("PHB_WORKSPACE_PATH")
+        ws_str = os.environ.get(ENV_WORKSPACE_PATH)
         if not ws_str:
             raise RuntimeError(
                 "PHB_WORKSPACE_PATH environment variable is not set. "
@@ -87,7 +89,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     )
     desktop_private_key = load_or_create_master_key(workspace_path, filename=config.master_key_file)
     stop_event = asyncio.Event()
-    write_pid(workspace_path, "phbcli.pid")
+    write_pid(workspace_path, PID_FILENAME)
     set_workspace_path(workspace_path)
     plugin_manager: PluginManager | None = None
 
@@ -146,7 +148,7 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
 
             from phb_commons.attestation import create_device_attestation
 
-            device_id = f"mobile-{uuid.uuid4().hex[:12]}"
+            device_id = f"{DEVICE_ID_PREFIX}{uuid.uuid4().hex[:DEVICE_ID_SUFFIX_LENGTH]}"
             attestation = create_device_attestation(
                 desktop_private_key,
                 device_id=device_id,

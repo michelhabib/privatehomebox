@@ -36,10 +36,11 @@ from .instance import (
     resolve_instance,
     set_default_instance,
 )
+from .constants import APP_NAME, PID_FILENAME
 from .relay import configure_auth, get_connected_devices, handle_connection
 
 cli = typer.Typer(
-    name="phbgateway",
+    name=APP_NAME,
     help="Private Home Box relay gateway with instance management.",
     add_completion=False,
     invoke_without_command=True,
@@ -47,7 +48,7 @@ cli = typer.Typer(
 instance_app = typer.Typer(help="Manage gateway instances.")
 cli.add_typer(instance_app, name="instance")
 console = Console()
-GATEWAY_PID_FILENAME = "gateway.pid"
+GATEWAY_PID_FILENAME = PID_FILENAME
 
 
 @cli.callback(invoke_without_command=True)

@@ -5,9 +5,10 @@ Exports the key building blocks every plugin author needs:
   - ChannelPlugin    — abstract base class to implement
   - PluginTransport  — handles WS connection to phbcli, JSON-RPC dispatch
   - rpc              — JSON-RPC 2.0 helpers (build / parse)
+  - constants        — protocol constants (RPC methods, WS close codes, etc.)
 """
 
-from . import log_setup
+from . import constants, log_setup
 from .base import ChannelPlugin
 from .models import ChannelInfo, RpcRequest, RpcResponse, UnifiedMessage
 from .transport import PluginTransport
@@ -15,6 +16,7 @@ from .transport import PluginTransport
 __version__ = "0.1.0"
 __all__ = [
     "log_setup",
+    "constants",
     "ChannelPlugin",
     "ChannelInfo",
     "RpcRequest",

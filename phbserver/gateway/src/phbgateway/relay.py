@@ -29,7 +29,19 @@ from websockets.asyncio.server import ServerConnection
 from phb_commons.nonces import generate_nonce
 from phb_commons.log import Logger
 
+from phb_channel_sdk.constants import (
+    AUTH_ROLE_DESKTOP,
+    WS_CLOSE_AUTH_FAILED,
+    WS_CLOSE_DESKTOP_NOT_CONNECTED,
+    WS_CLOSE_DUPLICATE_DEVICE,
+    WS_CLOSE_NORMAL,
+    WS_CLOSE_PAIRING_FIELD_MISSING,
+    WS_CLOSE_PAIRING_TIMEOUT,
+)
+from phb_commons.constants.timing import DEFAULT_AUTH_TIMEOUT_SECONDS, DEFAULT_PAIRING_WAIT_SECONDS
+
 from .auth import GatewayAuthManager
+from .constants import PAIRING_REQUEST_ID_BYTES, WS_REASON_MAX_LENGTH
 
 log = Logger.get("RELAY")
 
@@ -37,12 +49,12 @@ log = Logger.get("RELAY")
 _registry: Dict[str, ServerConnection] = {}
 _registry_lock = asyncio.Lock()
 
-AUTH_TIMEOUT_SECONDS = 30.0
+AUTH_TIMEOUT_SECONDS = DEFAULT_AUTH_TIMEOUT_SECONDS
 _auth_manager: GatewayAuthManager | None = None
 _desktop_ws: ServerConnection | None = None
 _pairing_pending: Dict[str, ServerConnection] = {}
 _pairing_lock = asyncio.Lock()
-PAIRING_WAIT_SECONDS = 120.0
+PAIRING_WAIT_SECONDS = DEFAULT_PAIRING_WAIT_SECONDS
 
 
 def _message_id(msg: dict[str, object]) -> str | None:
@@ -67,7 +79,7 @@ async def register(device_id: str, ws: ServerConnection) -> bool:
                 return True
             log.warning("Duplicate device connection rejected", device_id=device_id)
             try:
-                await ws.close(code=4009, reason="device already connected")
+                await ws.close(code=WS_CLOSE_DUPLICATE_DEVICE, reason="device already connected")
             except Exception:
                 pass
             return False
@@ -138,7 +150,7 @@ async def _authenticate_connection(
     if not isinstance(mode, str):
         return False, None, "auth_mode is required", None
 
-    if mode == "desktop":
+    if mode == AUTH_ROLE_DESKTOP:
         device_id = msg.get("device_id")
         signature = msg.get("nonce_signature") or msg.get("signature")
         if not isinstance(device_id, str) or not device_id:
@@ -153,10 +165,10 @@ async def _authenticate_connection(
             result.ok,
             device_id if result.ok else None,
             result.reason or "auth failed",
-            "desktop",
+            AUTH_ROLE_DESKTOP,
         )
 
-    if mode == "device":
+    if mode == AUTH_ROLE_DEVICE:
         attestation = msg.get("attestation")
         nonce_signature = msg.get("nonce_signature") or msg.get("signature")
         if not isinstance(attestation, dict):
@@ -202,18 +214,18 @@ async def _forward_pairing_request(ws: ServerConnection, msg: dict[str, object])
     pairing_code = msg.get("pairing_code")
     device_public_key = msg.get("device_public_key")
     if not isinstance(pairing_code, str) or not pairing_code:
-        await ws.close(code=4004, reason="pairing_code is required")
+        await ws.close(code=WS_CLOSE_PAIRING_FIELD_MISSING, reason="pairing_code is required")
         return
     if not isinstance(device_public_key, str) or not device_public_key:
-        await ws.close(code=4004, reason="device_public_key is required")
+        await ws.close(code=WS_CLOSE_PAIRING_FIELD_MISSING, reason="device_public_key is required")
         return
 
     desktop_ws = await _get_desktop_ws()
     if desktop_ws is None:
-        await ws.close(code=4006, reason="desktop not connected")
+        await ws.close(code=WS_CLOSE_DESKTOP_NOT_CONNECTED, reason="desktop not connected")
         return
 
-    request_id = secrets.token_hex(12)
+    request_id = secrets.token_hex(PAIRING_REQUEST_ID_BYTES)
     async with _pairing_lock:
         _pairing_pending[request_id] = ws
 
@@ -234,7 +246,7 @@ async def _forward_pairing_request(ws: ServerConnection, msg: dict[str, object])
     except asyncio.TimeoutError:
         async with _pairing_lock:
             _pairing_pending.pop(request_id, None)
-        await ws.close(code=4008, reason="pairing timeout")
+        await ws.close(code=WS_CLOSE_PAIRING_TIMEOUT, reason="pairing timeout")
 
 
 async def _handle_pairing_response_from_desktop(msg: dict[str, object]) -> None:
@@ -271,7 +283,7 @@ async def _handle_pairing_response_from_desktop(msg: dict[str, object]) -> None:
     try:
         await pending_ws.send(json.dumps(outbound))
     finally:
-        await pending_ws.close(code=1000, reason="pairing complete")
+        await pending_ws.close(code=WS_CLOSE_NORMAL, reason="pairing complete")
 
 
 async def handle_connection(ws: ServerConnection) -> None:
@@ -283,7 +295,7 @@ async def handle_connection(ws: ServerConnection) -> None:
         raw = await asyncio.wait_for(ws.recv(), timeout=AUTH_TIMEOUT_SECONDS)
     except asyncio.TimeoutError:
         log.warning("Auth rejected", reason="timeout")
-        await ws.close(code=4003, reason="auth timeout")
+        await ws.close(code=WS_CLOSE_AUTH_FAILED, reason="auth timeout")
         return
     except websockets.ConnectionClosed:
         return
@@ -292,11 +304,11 @@ async def handle_connection(ws: ServerConnection) -> None:
         first_msg = json.loads(str(raw))
     except json.JSONDecodeError:
         log.warning("Auth rejected", reason="first message invalid JSON")
-        await ws.close(code=4003, reason="invalid json")
+        await ws.close(code=WS_CLOSE_AUTH_FAILED, reason="invalid json")
         return
     if not isinstance(first_msg, dict):
         log.warning("Auth rejected", reason="first message must be object")
-        await ws.close(code=4003, reason="invalid first message")
+        await ws.close(code=WS_CLOSE_AUTH_FAILED, reason="invalid first message")
         return
 
     if first_msg.get("type") == "pairing_request":
@@ -306,13 +318,13 @@ async def handle_connection(ws: ServerConnection) -> None:
     ok, device_id, reason, role = await _authenticate_connection(nonce, first_msg)
     if not ok or not device_id:
         log.warning("Auth rejected", reason=reason)
-        await ws.close(code=4003, reason=reason[:120])
+        await ws.close(code=WS_CLOSE_AUTH_FAILED, reason=reason[:WS_REASON_MAX_LENGTH])
         return
 
     await ws.send(json.dumps({"type": "auth_ok", "device_id": device_id}))
     log.info("Device authenticated", device_id=device_id, role=role)
 
-    is_desktop = role == "desktop"
+    is_desktop = role == AUTH_ROLE_DESKTOP
     if not await register(device_id, ws):
         return
     if is_desktop:

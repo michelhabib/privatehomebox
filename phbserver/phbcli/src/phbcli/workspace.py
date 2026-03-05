@@ -27,6 +27,12 @@ from pathlib import Path
 from platformdirs import user_data_dir
 from pydantic import BaseModel
 
+from phb_commons.constants.domain import DEFAULT_WORKSPACE_NAME
+from phb_commons.constants.network import PORT_RANGE_START, PORTS_PER_SLOT
+from phb_commons.constants.storage import REGISTRY_FILENAME
+
+from .constants import APP_NAME, ENV_WORKSPACE
+
 
 class WorkspaceError(Exception):
     pass
@@ -39,8 +45,8 @@ class WorkspaceEntry(BaseModel):
 
 
 class WorkspaceRegistry(BaseModel):
-    default_workspace: str = "default"
-    port_range_start: int = 18080
+    default_workspace: str = DEFAULT_WORKSPACE_NAME
+    port_range_start: int = PORT_RANGE_START
     workspaces: dict[str, WorkspaceEntry] = {}
 
 
@@ -49,11 +55,11 @@ class WorkspaceRegistry(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _app_data_dir() -> Path:
-    return Path(user_data_dir("phbcli", appauthor=False))
+    return Path(user_data_dir(APP_NAME, appauthor=False))
 
 
 def registry_path() -> Path:
-    return _app_data_dir() / "registry.json"
+    return _app_data_dir() / REGISTRY_FILENAME
 
 
 def default_workspace_path(name: str) -> Path:
@@ -65,15 +71,15 @@ def default_workspace_path(name: str) -> Path:
 # ---------------------------------------------------------------------------
 
 def http_port_for(registry: WorkspaceRegistry, slot: int) -> int:
-    return registry.port_range_start + slot * 3
+    return registry.port_range_start + slot * PORTS_PER_SLOT
 
 
 def plugin_port_for(registry: WorkspaceRegistry, slot: int) -> int:
-    return registry.port_range_start + slot * 3 + 1
+    return registry.port_range_start + slot * PORTS_PER_SLOT + 1
 
 
 def gateway_port_for(registry: WorkspaceRegistry, slot: int) -> int:
-    return registry.port_range_start + slot * 3 + 2
+    return registry.port_range_start + slot * PORTS_PER_SLOT + 2
 
 
 def next_free_slot(registry: WorkspaceRegistry) -> int:
@@ -115,7 +121,7 @@ def resolve_workspace(name: str | None = None) -> tuple[WorkspaceEntry, Workspac
     Raises WorkspaceError if the workspace cannot be found.
     """
     registry = load_registry()
-    target = name or os.environ.get("PHB_WORKSPACE") or registry.default_workspace
+    target = name or os.environ.get(ENV_WORKSPACE) or registry.default_workspace
 
     if not registry.workspaces:
         raise WorkspaceError(

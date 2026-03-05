@@ -19,11 +19,15 @@ from websockets.exceptions import ConnectionClosed
 from phb_commons.log import Logger
 
 from phb_channel_sdk import ChannelInfo, ChannelPlugin, UnifiedMessage
+from phb_channel_sdk.constants import AUTH_ROLE_DESKTOP, RECONNECT_BACKOFF_BASE, RECONNECT_BACKOFF_MAX
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+from phb_commons.constants.network import DEFAULT_GATEWAY_PORT
+from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
 
 log = Logger.get("DEVICES")
 
-BACKOFF_BASE = 1.0
-BACKOFF_MAX = 60.0
+BACKOFF_BASE = RECONNECT_BACKOFF_BASE
+BACKOFF_MAX = RECONNECT_BACKOFF_MAX
 AUTH_TIMEOUT_SECONDS = 15.0
 
 
@@ -35,15 +39,15 @@ class DevicesChannel(ChannelPlugin):
     @property
     def info(self) -> ChannelInfo:
         return ChannelInfo(
-            name="devices",
+            name=MANDATORY_CHANNEL_NAME,
             version="0.1.0",
             description="Bridges gateway-connected devices to UnifiedMessage.",
         )
 
     def __init__(self) -> None:
-        self._gateway_url: str = "ws://localhost:8765"
+        self._gateway_url: str = f"ws://localhost:{DEFAULT_GATEWAY_PORT}"
         self._device_id: str = ""
-        self._ping_interval: float = 30.0
+        self._ping_interval: float = DEFAULT_PING_INTERVAL_SECONDS
         self._master_key_path: Path = _default_master_key_path()
         self._master_private_key: Ed25519PrivateKey | None = None
         self._runner_task: asyncio.Task[None] | None = None
@@ -171,7 +175,7 @@ class DevicesChannel(ChannelPlugin):
 
         auth_response = {
             "type": "auth_response",
-            "auth_mode": "desktop",
+            "auth_mode": AUTH_ROLE_DESKTOP,
             "device_id": self._device_id,
             "nonce_signature": sign_nonce(key, nonce),
         }
@@ -224,7 +228,7 @@ class DevicesChannel(ChannelPlugin):
                 "sender_device_id": sender_device_id,
             }
 
-        unified.channel = "devices"
+        unified.channel = MANDATORY_CHANNEL_NAME
         unified.direction = "inbound"
         log.info(
             "Inbound message from gateway",

@@ -6,6 +6,46 @@ icon: "folder-cog"
 
 Use instance commands to manage persistent gateway definitions.
 
+## Resolution order
+
+Commands that accept `--instance` resolve the target in this order:
+
+1. `--instance <name>`
+2. `PHB_GATEWAY_INSTANCE` environment variable
+3. default instance in registry
+
+<Note>
+  `--instance` is the primary user flow. `PHB_GATEWAY_INSTANCE` is optional for scripting.
+</Note>
+
+### Environment variable examples
+
+```bash
+# one command (Linux/macOS)
+PHB_GATEWAY_INSTANCE=home phbgateway status
+```
+
+```powershell
+# PowerShell session (Windows)
+$env:PHB_GATEWAY_INSTANCE = "home"
+phbgateway start
+phbgateway status
+```
+
+```bat
+:: cmd.exe session (Windows)
+set PHB_GATEWAY_INSTANCE=home
+phbgateway start
+phbgateway status
+```
+
+### Internal process env var
+
+When `phbgateway start` launches a detached gateway process, the CLI can pass `PHB_GATEWAY_INSTANCE_PATH` to the child process internally.
+
+- You do not need to set `PHB_GATEWAY_INSTANCE_PATH` manually.
+- This keeps runtime actions scoped to the intended instance folder.
+
 ## List instances
 
 ```bash

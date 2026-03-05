@@ -12,6 +12,7 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from .constants.domain import DEFAULT_ATTESTATION_EXPIRY_DAYS
 from .signing import sign_bytes, verify_signature
 from .timestamps import parse_iso8601_utc, utc_iso, utc_now
 
@@ -32,7 +33,7 @@ def create_device_attestation(
     *,
     device_id: str,
     device_public_key_b64: str,
-    expires_days: int = 30,
+    expires_days: int = DEFAULT_ATTESTATION_EXPIRY_DAYS,
 ) -> dict[str, Any]:
     """Create and sign a canonical device attestation blob."""
     issued_at = utc_now()

@@ -32,6 +32,21 @@ from phb_commons.process import (
     write_channel_pid,
 )
 
+from phb_channel_sdk.constants import (
+    JSONRPC_ERROR_METHOD_NOT_FOUND,
+    METHOD_CONFIGURE,
+    METHOD_EVENT,
+    METHOD_RECEIVE,
+    METHOD_REGISTER,
+    METHOD_SEND,
+    METHOD_STATUS,
+    METHOD_STOP,
+    WS_CLOSE_CHANNEL_REPLACED,
+)
+from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
+from phb_commons.constants.network import DEFAULT_LOCALHOST
+from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
+
 from .channel_config import ChannelConfig, list_enabled_channels, load_channel_config
 from .config import Config, resolve_log_dir
 from . import rpc_helpers as rpc
@@ -66,7 +81,7 @@ class PluginManager:
         self._on_event = on_event
         self._channels: dict[str, _ConnectedChannel] = {}
         self._subprocesses: list[subprocess.Popen[bytes]] = []
-        self._host = "127.0.0.1"
+        self._host = DEFAULT_LOCALHOST
         self._port = config.plugin_port
 
     # ------------------------------------------------------------------
@@ -150,7 +165,7 @@ class PluginManager:
     async def _shutdown_channels(self) -> None:
         for ch in list(self._channels.values()):
             try:
-                await ch.ws.send(rpc.build_notification("channel.stop", {}))
+                await ch.ws.send(rpc.build_notification(METHOD_STOP, {}))
             except Exception:
                 pass
 
@@ -189,7 +204,7 @@ class PluginManager:
                 req_id: Any = data.get("id")
 
                 match method:
-                    case "channel.register":
+                    case _ if method == METHOD_REGISTER:
                         channel_name = params["name"]
                         prev = self._channels.get(channel_name)
                         if prev is not None and prev.ws is not ws:
@@ -198,11 +213,11 @@ class PluginManager:
                                 channel=channel_name,
                             )
                             try:
-                                await prev.ws.send(rpc.build_notification("channel.stop", {}))
+                                await prev.ws.send(rpc.build_notification(METHOD_STOP, {}))
                             except Exception:
                                 pass
                             try:
-                                await prev.ws.close(code=4010, reason="replaced by newer registration")
+                                await prev.ws.close(code=WS_CLOSE_CHANNEL_REPLACED, reason="replaced by newer registration")
                             except Exception:
                                 pass
                         self._channels[channel_name] = _ConnectedChannel(
@@ -218,7 +233,7 @@ class PluginManager:
                         )
                         await self._push_config(channel_name)
 
-                    case "channel.receive":
+                    case _ if method == METHOD_RECEIVE:
                         if self._on_message:
                             try:
                                 await self._on_message(params)
@@ -230,7 +245,7 @@ class PluginManager:
                                     exc_info=True,
                                 )
 
-                    case "channel.event":
+                    case _ if method == METHOD_EVENT:
                         event_name = params.get("event")
                         event_data = params.get("data", {})
                         log.info(
@@ -259,7 +274,7 @@ class PluginManager:
                         if req_id is not None:
                             await ws.send(
                                 rpc.build_error(
-                                    -32601,
+                                    JSONRPC_ERROR_METHOD_NOT_FOUND,
                                     f"Method not found: {method}",
                                     req_id,
                                 )
@@ -298,10 +313,10 @@ class PluginManager:
     async def _push_config(self, channel_name: str) -> None:
         cfg = load_channel_config(self._workspace_path, channel_name)
         payload = dict(cfg.config) if cfg else {}
-        if channel_name == "devices":
+        if channel_name == MANDATORY_CHANNEL_NAME:
             payload.setdefault("gateway_url", self._config.gateway_url)
             payload.setdefault("device_id", self._config.device_id)
-            payload.setdefault("ping_interval", 30)
+            payload.setdefault("ping_interval", DEFAULT_PING_INTERVAL_SECONDS)
         if payload:
             await self.configure_channel(channel_name, payload)
 
@@ -316,12 +331,12 @@ class PluginManager:
         if ch is None:
             log.warning("Cannot send to channel — not connected", channel=channel_name)
             return
-        await ch.ws.send(rpc.build_notification("channel.send", message))
+        await ch.ws.send(rpc.build_notification(METHOD_SEND, message))
 
     async def broadcast(self, message: dict[str, Any]) -> None:
         for ch in list(self._channels.values()):
             try:
-                await ch.ws.send(rpc.build_notification("channel.send", message))
+                await ch.ws.send(rpc.build_notification(METHOD_SEND, message))
             except Exception as exc:
                 log.warning("Failed to broadcast to channel", channel=ch.name, error=str(exc))
 
@@ -332,7 +347,7 @@ class PluginManager:
         if ch is None:
             return
         await ch.ws.send(
-            rpc.build_notification("channel.configure", {"config": config})
+            rpc.build_notification(METHOD_CONFIGURE, {"config": config})
         )
 
     async def send_event_to_channel(
@@ -346,7 +361,7 @@ class PluginManager:
             return
         await ch.ws.send(
             rpc.build_notification(
-                "channel.event",
+                METHOD_EVENT,
                 {"event": event, "data": data},
             )
         )
@@ -361,7 +376,7 @@ class PluginManager:
         loop = asyncio.get_running_loop()
         fut: asyncio.Future[Any] = loop.create_future()
         ch.pending[req_id] = fut
-        await ch.ws.send(rpc.build_request("channel.status", request_id=req_id))
+        await ch.ws.send(rpc.build_request(METHOD_STATUS, request_id=req_id))
         try:
             return await asyncio.wait_for(fut, timeout=5.0)
         except asyncio.TimeoutError:

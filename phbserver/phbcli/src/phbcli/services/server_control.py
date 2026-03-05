@@ -11,11 +11,12 @@ from phb_commons.process import is_running, read_pid, remove_pid, stop_process, 
 from rich.console import Console
 
 from ..config import Config
+from ..constants import ENV_WORKSPACE_PATH, PID_FILENAME
 from ..crypto import load_or_create_master_key
 from ..workspace import WorkspaceEntry, WorkspaceRegistry
 from .bootstrap import ensure_mandatory_devices_channel
 
-PHBCLI_PID_FILENAME = "phbcli.pid"
+PHBCLI_PID_FILENAME = PID_FILENAME
 
 
 def do_start(
@@ -60,7 +61,7 @@ def do_start(
             python = pythonw
 
     script = str(Path(__file__).parents[1] / "_server_process.py")
-    env = {**os.environ, "PHB_WORKSPACE_PATH": str(workspace_path)}
+    env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
 
     if sys.platform == "win32":
         proc = subprocess.Popen(

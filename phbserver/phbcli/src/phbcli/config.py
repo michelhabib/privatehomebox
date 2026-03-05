@@ -26,17 +26,31 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 
+from phb_commons.constants.domain import (
+    DEFAULT_ATTESTATION_EXPIRY_DAYS,
+    DEFAULT_PAIRING_CODE_LENGTH,
+    DEFAULT_PAIRING_CODE_TTL_SECONDS,
+)
+from phb_commons.constants.network import (
+    DEFAULT_GATEWAY_PORT,
+    DEFAULT_LOCALHOST,
+    PORT_OFFSET_HTTP,
+    PORT_OFFSET_PLUGIN,
+    PORT_RANGE_START,
+)
+from phb_commons.constants.storage import CONFIG_FILENAME, LOGS_DIR, MASTER_KEY_FILENAME
+
 
 class Config(BaseModel):
     device_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    gateway_url: str = "ws://localhost:8765"
-    http_host: str = "127.0.0.1"
-    http_port: int = 18080
-    plugin_port: int = 18081
-    master_key_file: str = "master_key.pem"
-    pairing_code_length: int = 6
-    pairing_code_ttl_seconds: int = 300
-    attestation_expires_days: int = 30
+    gateway_url: str = f"ws://localhost:{DEFAULT_GATEWAY_PORT}"
+    http_host: str = DEFAULT_LOCALHOST
+    http_port: int = PORT_RANGE_START + PORT_OFFSET_HTTP
+    plugin_port: int = PORT_RANGE_START + PORT_OFFSET_PLUGIN
+    master_key_file: str = MASTER_KEY_FILENAME
+    pairing_code_length: int = DEFAULT_PAIRING_CODE_LENGTH
+    pairing_code_ttl_seconds: int = DEFAULT_PAIRING_CODE_TTL_SECONDS
+    attestation_expires_days: int = DEFAULT_ATTESTATION_EXPIRY_DAYS
     log_dir: str = ""
     log_levels: dict[str, str] = Field(default_factory=dict)
 
@@ -52,7 +66,7 @@ class State(BaseModel):
 # ---------------------------------------------------------------------------
 
 def workspace_config_file(workspace_path: Path) -> Path:
-    return workspace_path / "config.json"
+    return workspace_path / CONFIG_FILENAME
 
 
 def workspace_state_file(workspace_path: Path) -> Path:
@@ -60,7 +74,7 @@ def workspace_state_file(workspace_path: Path) -> Path:
 
 
 def workspace_log_dir(workspace_path: Path) -> Path:
-    return workspace_path / "logs"
+    return workspace_path / LOGS_DIR
 
 
 def master_key_path(workspace_path: Path, config: Config) -> Path:

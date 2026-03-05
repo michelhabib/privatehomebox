@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from phb_commons.constants.timing import LOG_ROTATION_BACKUP_COUNT, LOG_ROTATION_MAX_BYTES
 from phb_commons.log import Logger
-
-_MAX_BYTES = 5 * 1024 * 1024  # 5 MB per file
-_BACKUP_COUNT = 5
 
 
 def init(
@@ -44,8 +42,8 @@ def init(
         str(log_dir / f"{component}.log"),
         level=level,
         rotate=True,
-        max_bytes=_MAX_BYTES,
-        backup_count=_BACKUP_COUNT,
+        max_bytes=LOG_ROTATION_MAX_BYTES,
+        backup_count=LOG_ROTATION_BACKUP_COUNT,
     )
 
     if log_levels:

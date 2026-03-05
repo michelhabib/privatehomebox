@@ -9,6 +9,10 @@ from pathlib import Path
 from platformdirs import user_data_dir
 from pydantic import BaseModel
 
+from phb_commons.constants.storage import REGISTRY_FILENAME
+
+from .constants import APP_NAME, DEFAULT_INSTANCE_NAME, ENV_INSTANCE
+
 
 class GatewayInstanceError(Exception):
     pass
@@ -22,16 +26,16 @@ class GatewayInstanceEntry(BaseModel):
 
 
 class GatewayRegistry(BaseModel):
-    default_instance: str = "default"
+    default_instance: str = DEFAULT_INSTANCE_NAME
     instances: dict[str, GatewayInstanceEntry] = {}
 
 
 def _app_data_dir() -> Path:
-    return Path(user_data_dir("phbgateway", appauthor=False))
+    return Path(user_data_dir(APP_NAME, appauthor=False))
 
 
 def registry_path() -> Path:
-    return _app_data_dir() / "registry.json"
+    return _app_data_dir() / REGISTRY_FILENAME
 
 
 def default_instance_path(name: str) -> Path:
@@ -56,7 +60,7 @@ def save_registry(registry: GatewayRegistry) -> None:
 
 def resolve_instance(name: str | None = None) -> tuple[GatewayInstanceEntry, GatewayRegistry]:
     registry = load_registry()
-    target = name or os.environ.get("PHB_GATEWAY_INSTANCE") or registry.default_instance
+    target = name or os.environ.get(ENV_INSTANCE) or registry.default_instance
 
     if not registry.instances:
         raise GatewayInstanceError(

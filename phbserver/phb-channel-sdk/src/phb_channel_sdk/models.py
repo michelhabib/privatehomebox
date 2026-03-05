@@ -8,6 +8,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from .constants import CONTENT_TYPE_TEXT, JSONRPC_VERSION
+
 
 class UnifiedMessage(BaseModel):
     """Canonical cross-channel message format.
@@ -23,7 +25,7 @@ class UnifiedMessage(BaseModel):
     direction: str  # "inbound" | "outbound"
     sender_id: str
     recipient_id: str | None = None
-    content_type: str = "text"  # "text" | "image" | "audio" | "location" | "command"
+    content_type: str = CONTENT_TYPE_TEXT
     body: str = ""
     metadata: dict[str, Any] = Field(default_factory=dict)
     timestamp: datetime = Field(
@@ -34,7 +36,7 @@ class UnifiedMessage(BaseModel):
 class RpcRequest(BaseModel):
     """JSON-RPC 2.0 request or notification (notification when id is None)."""
 
-    jsonrpc: str = "2.0"
+    jsonrpc: str = JSONRPC_VERSION
     method: str
     params: dict[str, Any] = Field(default_factory=dict)
     id: str | int | None = None
@@ -43,7 +45,7 @@ class RpcRequest(BaseModel):
 class RpcResponse(BaseModel):
     """JSON-RPC 2.0 response."""
 
-    jsonrpc: str = "2.0"
+    jsonrpc: str = JSONRPC_VERSION
     result: Any = None
     error: dict[str, Any] | None = None
     id: str | int | None = None

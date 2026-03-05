@@ -15,6 +15,8 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
+from phb_commons.constants.storage import AGENT_DIR, CONFIG_FILENAME, SYSTEM_PROMPT_FILENAME
+
 logger = logging.getLogger(__name__)
 
 _DEFAULT_SYSTEM_PROMPT = """\
@@ -49,15 +51,15 @@ class AgentConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 def workspace_agent_dir(workspace_path: Path) -> Path:
-    return workspace_path / "agent"
+    return workspace_path / AGENT_DIR
 
 
 def _agent_config_file(workspace_path: Path) -> Path:
-    return workspace_agent_dir(workspace_path) / "config.json"
+    return workspace_agent_dir(workspace_path) / CONFIG_FILENAME
 
 
 def _agent_system_prompt_file(workspace_path: Path) -> Path:
-    return workspace_agent_dir(workspace_path) / "system_prompt.md"
+    return workspace_agent_dir(workspace_path) / SYSTEM_PROMPT_FILENAME
 
 
 # ---------------------------------------------------------------------------

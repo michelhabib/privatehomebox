@@ -10,6 +10,46 @@ Use workspace commands to create, inspect, and remove these instances.
 
 For on-disk paths and JSON file formats, see `/cli-storage`.
 
+## Resolution order
+
+Commands that accept `--workspace` resolve the target in this order:
+
+1. `--workspace <name>`
+2. `PHB_WORKSPACE` environment variable
+3. default workspace in registry
+
+<Note>
+  `--workspace` is the primary user flow. `PHB_WORKSPACE` is optional for scripting.
+</Note>
+
+### Environment variable examples
+
+```bash
+# one command (Linux/macOS)
+PHB_WORKSPACE=home phbcli status
+```
+
+```powershell
+# PowerShell session (Windows)
+$env:PHB_WORKSPACE = "home"
+phbcli start
+phbcli status
+```
+
+```bat
+:: cmd.exe session (Windows)
+set PHB_WORKSPACE=home
+phbcli start
+phbcli status
+```
+
+### Internal process env var
+
+When `phbcli start` launches a detached server process, the CLI passes `PHB_WORKSPACE_PATH` to the child process internally.
+
+- You do not need to set `PHB_WORKSPACE_PATH` manually.
+- This keeps each background process bound to the correct workspace folder.
+
 ## List workspaces
 
 ```bash

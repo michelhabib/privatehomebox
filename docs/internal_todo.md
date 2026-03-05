@@ -1,20 +1,10 @@
 
-# Review and Fix Code
-- phbcli
-  - Outbound Not Working
-- phbgateway
-- phb-channel-sdk
-- Flutter App Web
-- Flutter App Mobile
-- General
-  - Put all config files in one organized place (workspace)
-  - Better/Colorful Logging Format
-  - Log what really matters
-- Docs
-  - check cursor history at work, for using ENV to set workspace, and use that to update mintdocs.
+# Daily Tasks
+- Log what really matters
+- Move Docs to Mintdocs.
+- check cursor history at work, for using ENV to set workspace, and use that to update mintdocs.
 
 # Add Features
-- Add xLogger Custom Logging module for better terminal tracking.
 
 # Iterations
 
@@ -64,3 +54,12 @@
 # Completed
 
 - Initial Bootstrapping of Project.
+  - phbcli
+  - phbgateway
+  - phb-channel-sdk (Devices Channel)
+  - Flutter App Web
+- phbcli Outbound Not Working
+- Add xLogger Custom Logging module for better terminal tracking.
+- introduce workspace concept for better organization of config files.
+- introduce gateway instances concept for better organization of gateway config files.
+ 

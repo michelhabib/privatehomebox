@@ -13,6 +13,8 @@ from typing import Mapping
 import colorama
 import structlog
 
+from .constants.timing import LOG_ROTATION_BACKUP_COUNT, LOG_ROTATION_MAX_BYTES
+
 colorama.init(autoreset=True)
 
 __all__ = [
@@ -324,8 +326,8 @@ class Logger:
         level: str | int = "ERROR",
         rotate: bool = True,
         mode: str = "a",
-        max_bytes: int = 10 * 1024 * 1024,
-        backup_count: int = 5,
+        max_bytes: int = LOG_ROTATION_MAX_BYTES,
+        backup_count: int = LOG_ROTATION_BACKUP_COUNT,
         use_json: bool = False,
     ) -> logging.Handler:
         """Mirror log events at or above *level* into a file."""

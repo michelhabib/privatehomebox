@@ -19,10 +19,11 @@ from phb_commons.log import Logger
 from phb_commons.process import is_running, read_pid
 
 from .config import Config, load_state
+from .constants import APP_NAME, PID_FILENAME
 
 log = Logger.get("HTTP")
 
-app = FastAPI(title="phbcli", version="0.1.0", docs_url=None, redoc_url=None)
+app = FastAPI(title=APP_NAME, version="0.1.0", docs_url=None, redoc_url=None)
 
 # Injected by _server_process.py before the server starts.
 _workspace_path: Path | None = None
@@ -43,7 +44,7 @@ def set_channel_info_provider(fn: Callable[[], list[dict[str, str]]]) -> None:
 async def get_status() -> JSONResponse:
     assert _workspace_path is not None, "workspace_path not initialised"
     state = load_state(_workspace_path)
-    pid = read_pid(_workspace_path, "phbcli.pid")
+    pid = read_pid(_workspace_path, PID_FILENAME)
     return JSONResponse(
         {
             "running": is_running(pid),

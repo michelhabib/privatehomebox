@@ -52,5 +52,8 @@ https://chatgpt.com/share/69a855f4-f80c-800b-9cfa-b6567bbe9330
 
 # Projects to Watch for Inspiration
 
+https://clawclones.com/
+https://www.reddit.com/r/AI_Agents/comments/1raq9qy/50_openclaw_alternatives_for_business/
+
   [Ouroboros](https://github.com/razzant/ouroboros?tab=readme-ov-file)
   [OpenClaw](https://github.com/openclaw/openclaw)
