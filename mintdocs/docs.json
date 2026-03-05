@@ -38,7 +38,8 @@
       {
         "tab": "Architecture",
         "pages": [
-          "general"
+          "general",
+          "constants"
         ]
       }
     ]
