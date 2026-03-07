@@ -1,0 +1,15 @@
+graph LR
+    Phone["📱 Mobile Device"]
+    Web["🌐 Web Browser"]
+    Laptop["💻 Laptop / Desktop"]
+
+    subgraph RootNode["🖥️  Root Node — Desktop"]
+        direction TB
+        GW["Local Gateway"]
+        WS["Workspace\nserver process"]
+        GW <-->|"internal routing"| WS
+    end
+
+    Phone -->|"WebSocket · LAN"| GW
+    Web -->|"WebSocket · LAN"| GW
+    Laptop -->|"WebSocket · LAN"| GW

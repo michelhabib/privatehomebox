@@ -1,0 +1,12 @@
+repos:
+  - repo: local
+    hooks:
+      - id: generate-diagram-images
+        name: Generate mermaid diagram images
+        language: system
+        entry: uv run python diagram-gen/generate.py
+        # Runs whenever any .mdx file is staged
+        files: \.mdx$
+        pass_filenames: false
+        # Stage the generated PNGs so they are included in the commit
+        stages: [pre-commit]

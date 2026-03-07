@@ -1,0 +1,33 @@
+graph LR
+    GW["🔒 Gateway\nauth boundary"]
+    ExtAPI["🌐 External APIs\nTelegram · WhatsApp · …"]
+
+    subgraph ServerProcess["🖥️  Server Process — one workspace"]
+        direction TB
+
+        HTTP["HTTP Server  :18080\n/status · /channels · /tools · /invoke"]
+
+        subgraph ChannelLayer["Channel Manager  :18081"]
+            direction TB
+            PM["Plugin Manager\nWebSocket server"]
+            CH1["channel-device\nsubprocess"]
+            CH2["channel-telegram\nsubprocess"]
+            CH3["channel-whatsapp\nsubprocess"]
+        end
+
+        CM["Communication Manager\ninbound queue  ·  outbound queue\npermission checks"]
+        AM["Agent Manager\nLangChain  ·  LangGraph memory\nthread_id = channel:sender_id"]
+
+        PM <-->|"JSON-RPC 2.0 · local WS"| CH1
+        PM <-->|"JSON-RPC 2.0 · local WS"| CH2
+        PM <-->|"JSON-RPC 2.0 · local WS"| CH3
+
+        PM -->|"on_message"| CM
+        CM -->|"inbound queue"| AM
+        AM -->|"enqueue_outbound"| CM
+        CM -->|"send_to_channel"| PM
+    end
+
+    GW <-->|"device traffic"| CH1
+    ExtAPI <-->|"bot API"| CH2
+    ExtAPI <-->|"bot API"| CH3

@@ -1,5 +1,7 @@
 
 # Daily Tasks
+
+- Describe progressive Architecture in MintDocs, add Diagrams.
 - add versioning.
 - Log what really matters
 - Move Docs to Mintdocs.
@@ -10,6 +12,7 @@
 # Cleanup
 
 # Add Features
+- Resource Usage (CPU/Memory/Disk/Network/LLM$)
 - security policy
 - add browser tool
 - install tools as plugins
@@ -60,6 +63,13 @@
 	- Many Common Features by default
 	- Loosely coupled Interfaces (Plugin Architecture)
 
+# Use Cases:
+- Find information in my chats, files
+- Bot to learn about me, my family, preferences, etc... and offer therapy
+- Get web information on my behalf from social media, etc.. and send directly to me via chat
+- Help me Organize, schedule and remind me of important things in my life
+- Use my location, preferences, and my family's and kid's location and preferences for better life organiaztion. ex: kids are late, Kids are home, wife just left, stranger around home, provide info about places i am visiting.
+- Access my home's cameras, wifi, iot, for better control and insight, notifications.
 
 # Completed
 
@@ -73,5 +83,5 @@
 - introduce workspace concept for better organization of config files.
 - introduce gateway instances concept for better organization of gateway config files.
 - (tool-architecture) separate cli from functionality, and allow an api for the website.
-- - Refactor phbcli into organized folders - runtime/tools/commands/services/domain
+- Refactor phbcli into organized folders - runtime/tools/commands/services/domain
  

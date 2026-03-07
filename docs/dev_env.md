@@ -17,3 +17,6 @@ this also includes instructions for setting up ai tools for cursor to make it ea
 
 npm i -g mint
 
+# Install Mermaid Diagram Generator
+
+follow the instructions in [diagram-gen/README.md](../diagram-gen/README.md)

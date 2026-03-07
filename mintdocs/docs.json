@@ -16,21 +16,21 @@
           {
             "group": "CLI",
             "pages": [
-              "setup-and-uninstall",
-              "server-ops",
-              "workspace",
-              "cli-storage",
-              "devices",
-              "channel"
+              "phb/setup-and-uninstall",
+              "phb/server-ops",
+              "phb/workspace",
+              "phb/cli-storage",
+              "phb/devices",
+              "phb/channel"
             ]
           },
           {
             "group": "Gateway",
             "pages": [
-              "gateway-cli",
-              "gateway-instances",
-              "gateway-runtime",
-              "gateway-storage"
+              "phb/gateway-cli",
+              "phb/gateway-instances",
+              "phb/gateway-runtime",
+              "phb/gateway-storage"
             ]
           }
         ]
@@ -38,9 +38,10 @@
       {
         "tab": "Architecture",
         "pages": [
-          "general",
-          "constants",
-          "tools-architecture"
+          "architecture/architecture-overview",
+          "architecture/general",
+          "architecture/constants",
+          "architecture/tools-architecture"
         ]
       }
     ]

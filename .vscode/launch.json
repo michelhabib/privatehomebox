@@ -34,6 +34,18 @@
         "type": "node-terminal",
         "request": "launch",
         "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && flutter run -d chrome --web-port 63000\""
+      },
+      {
+        "name": "Terminal mint dev",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\mintdocs && mint dev\""
+      },
+      {
+        "name": "Terminal diagram-gen",
+        "type": "node-terminal",
+        "request": "launch",
+        "command": "cmd /k \"cd /d ${workspaceFolder} && uv run python diagram-gen/generate.py\""
       }
     ],
     "compounds": [

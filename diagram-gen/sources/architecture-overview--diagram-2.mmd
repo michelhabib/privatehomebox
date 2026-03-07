@@ -1,0 +1,18 @@
+graph LR
+    Phone["📱 Mobile Device"]
+    Web["🌐 Web Browser"]
+    Laptop["💻 Laptop / Desktop"]
+
+    subgraph Cloud["☁️  Internet"]
+        VPS["VPS Gateway\ncloud server"]
+    end
+
+    subgraph RootNode["🖥️  Root Node — Desktop"]
+        WS["Workspace\nserver process"]
+    end
+
+    Phone -->|"WebSocket · HTTPS"| VPS
+    Web -->|"WebSocket · HTTPS"| VPS
+    Laptop -->|"WebSocket · HTTPS"| VPS
+
+    WS <-->|"outbound tunnel · WebSocket"| VPS
