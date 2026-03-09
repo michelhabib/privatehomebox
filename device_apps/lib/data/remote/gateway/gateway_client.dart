@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:web_socket_channel/web_socket_channel.dart';
 
+import '../../../core/constants/app_constants.dart';
 import '../../../core/errors/app_exception.dart';
 import '../../../core/utils/logger.dart';
 import '../../../domain/models/identity/device_identity.dart';
@@ -143,6 +144,14 @@ class GatewayClient {
     final channel = WebSocketChannel.connect(Uri.parse(url));
     _channel = channel;
 
+    // In web_socket_channel 3.x, channel.ready must be awaited. Without it,
+    // a failed connection never sets up the stream listener, so sink.close()
+    // in the finally block would hang forever (its done Future never completes).
+    await channel.ready.timeout(
+      AppConstants.authTimeout,
+      onTimeout: () => throw const GatewayException('Connection timed out'),
+    );
+
     final stream = channel.stream.asBroadcastStream();
 
     try {
@@ -158,7 +167,9 @@ class GatewayClient {
       await Future.any([_runMessageLoop(stream, stopSignal), stopSignal.future]);
     } finally {
       _connectedDeviceId = null;
-      await channel.sink.close();
+      // Do not await — if ready failed above the stream has no listener and
+      // sink.done would never complete.
+      channel.sink.close();
       _channel = null;
     }
   }

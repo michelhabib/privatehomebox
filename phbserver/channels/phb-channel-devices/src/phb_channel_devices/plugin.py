@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 import websockets
@@ -218,6 +219,12 @@ class DevicesChannel(ChannelPlugin):
         except Exception as exc:
             log.warning("Invalid UnifiedMessage from gateway", error=str(exc))
             return
+
+        # Override the sender's timestamp with the server's receive time.
+        # Device clocks can drift or be misconfigured — we have no control over
+        # them. Using the receive time ensures messages are ordered by when the
+        # server actually received them, not by whatever clock the sender runs.
+        unified.timestamp = datetime.now(timezone.utc)
 
         sender_device_id = msg.get("sender_device_id")
         if isinstance(sender_device_id, str) and sender_device_id:

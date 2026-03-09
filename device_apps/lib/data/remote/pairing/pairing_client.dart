@@ -38,6 +38,17 @@ class PairingClient {
     WebSocketChannel? channel;
     try {
       channel = WebSocketChannel.connect(Uri.parse(gatewayUrl));
+
+      // In web_socket_channel 3.x, channel.ready must be awaited before the
+      // stream is used. If the TCP connection fails or is blocked, ready rejects
+      // quickly (or after our timeout) rather than leaving the stream silently
+      // pending — which would cause the finally-block sink.close() to hang forever
+      // because foreignToLocalController.stream never gets a listener.
+      await channel.ready.timeout(
+        AppConstants.authTimeout,
+        onTimeout: () => throw const GatewayException('Connection timed out'),
+      );
+
       final stream = channel.stream.asBroadcastStream();
 
       // 1 — Wait for auth_challenge
@@ -95,7 +106,10 @@ class PairingClient {
     } catch (e) {
       throw GatewayException('WebSocket error: $e');
     } finally {
-      await channel?.sink.close();
+      // Do not await sink.close() — if the WebSocket future never resolved
+      // (blocked IP), the underlying stream has no listener and sink.done never
+      // completes, causing a permanent hang.
+      channel?.sink.close();
     }
   }
 

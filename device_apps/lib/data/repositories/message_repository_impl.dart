@@ -88,8 +88,6 @@ class MessageRepositoryImpl implements MessageRepository {
     final body = payload['body']?.toString();
     final senderId =
         payload['sender_id']?.toString() ?? frame.senderDeviceId;
-    final timestampStr = payload['timestamp']?.toString();
-
     // Ignore frames that don't carry a chat message payload (e.g. system frames).
     if (id == null || contentType == null || body == null || body.isEmpty) {
       return;
@@ -101,9 +99,13 @@ class MessageRepositoryImpl implements MessageRepository {
     final channelId = (metadata is Map ? metadata['channel_id']?.toString() : null)
         ?? AppConstants.defaultChannelId;
 
-    final timestamp =
-        DateTime.tryParse(timestampStr ?? '')?.toUtc() ??
-        DateTime.now().toUtc();
+    // Use the local receive time for ordering, NOT the sender's timestamp.
+    // Sender clocks can drift or be misconfigured — we have no control over them.
+    // Ordering by receive time guarantees messages always appear in the order
+    // this device received them, regardless of what clock the sender runs.
+    // The sender's original timestamp (payload['timestamp']) is available in the
+    // payload for display purposes if ever needed, but is not used for DB ordering.
+    final timestamp = DateTime.now().toUtc();
 
     final myDeviceId = _myDeviceIdGetter();
     // A message is outbound if we sent it from this device.

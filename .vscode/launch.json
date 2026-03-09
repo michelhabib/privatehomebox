@@ -33,13 +33,13 @@
         "name": "Terminal Flutter device_apps (web)",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && flutter run -d chrome --web-port 63000\""
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && fvm flutter run -d chrome --web-port 63000\""
       },
       {
         "name": "Terminal Flutter device_apps (android)",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && flutter run -d android\""
+        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && fvm flutter run -d android\""
       },
       {
         "name": "Terminal mint dev",

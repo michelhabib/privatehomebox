@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../application/providers.dart';
+import '../../../../core/errors/app_exception.dart';
 
 class MessageInputBar extends ConsumerStatefulWidget {
   const MessageInputBar({super.key, required this.channelId});
@@ -25,14 +26,32 @@ class _MessageInputBarState extends ConsumerState<MessageInputBar> {
     });
   }
 
-  void _send() {
+  Future<void> _send() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
     _controller.clear();
-    ref.read(messageSendNotifierProvider.notifier).sendText(
-          channelId: widget.channelId,
-          text: text,
-        );
+    try {
+      await ref.read(messageSendNotifierProvider.notifier).sendText(
+            channelId: widget.channelId,
+            text: text,
+          );
+    } on AppException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to send: ${e.message}'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to send message'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   @override

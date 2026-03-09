@@ -11,6 +11,34 @@ Install [uv](https://docs.astral.sh/uv/getting-started/installation/) — the Py
 
 Install [Flutter](https://docs.flutter.dev/install/quick).
 
+Then install [FVM](https://fvm.app) (Flutter Version Manager) to use the exact Flutter version pinned in the repo:
+
+```bash
+dart pub global activate fvm
+```
+
+On **Windows (Git Bash)**, add the following to `~/.bashrc`:
+
+```bash
+export PATH="$PATH:/c/Users/<YOU>/AppData/Local/Pub/Cache/bin"
+alias fvm='fvm.bat'
+```
+
+On **Windows**, also enable **Developer Mode** (Settings → System → For developers) so FVM can create the symlinks it needs.
+
+Once inside the `device_apps` folder, install the pinned Flutter version:
+
+```bash
+fvm install
+```
+
+Use `fvm flutter` in place of `flutter` for all commands, e.g.:
+
+```bash
+fvm flutter build apk --split-per-abi
+fvm flutter run
+```
+
 ## Documentation (optional)
 
 Install the [Mintlify CLI](https://www.mintlify.com/docs/quickstart) to preview the docs site locally and to set up AI tools in Cursor.

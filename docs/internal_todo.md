@@ -17,12 +17,12 @@
 - Add Plugin Discovery, Plugin Submission, rating, reviews, scanning, ecosystem...
 - add versioning.
 - Log what really matters
+- when server time and device time are different, how would you define the timestamp, inbound to device, or ourbound to server..
 
 # Refactoring
 - Gateway
 
 # Github Cleanup
-- Move code to dev branch.
 - setup branches.
 - Add Releases
 
