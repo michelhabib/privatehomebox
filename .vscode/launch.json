@@ -33,25 +33,25 @@
         "name": "Terminal Flutter device_apps (web)",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && fvm flutter run -d chrome --web-port 63000\""
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && fvm flutter run -d chrome --web-port 63000"
       },
       {
         "name": "Terminal Flutter device_apps (android)",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\device_apps && fvm flutter run -d android\""
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/device_apps\" && fvm flutter run -d android"
       },
       {
         "name": "Terminal mint dev",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder}\\mintdocs && mint dev\""
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")/mintdocs\" && mint dev"
       },
       {
         "name": "Terminal diagram-gen",
         "type": "node-terminal",
         "request": "launch",
-        "command": "cmd /k \"cd /d ${workspaceFolder} && uv run python diagram-gen/generate.py\""
+        "command": "cd \"$(cygpath \"${workspaceFolder}\")\" && uv run python diagram-gen/generate.py"
       }
     ],
     "compounds": [
