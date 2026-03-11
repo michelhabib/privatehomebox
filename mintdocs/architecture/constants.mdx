@@ -25,7 +25,7 @@ Before this design, the same values were duplicated across multiple packages wit
 
 ## Growth considerations
 
-**New workspace services.** If a fourth service is added per workspace slot (e.g. a metrics endpoint), add `PORT_OFFSET_METRICS: int = 3` to `network.py` and bump `PORTS_PER_SLOT` to `4`. No string-searching required — every port calculation already uses the formula.
+**New workspace services.** If a fifth service is added per workspace slot (e.g. a metrics endpoint), add `PORT_OFFSET_METRICS: int = 4` to `network.py` and bump `PORTS_PER_SLOT` to `5`. No string-searching required — every port calculation already uses the formula. (The fourth slot, offset 3, is already taken by the admin UI.)
 
 **New channel packages.** A new channel package imports from `phb_channel_sdk.constants` and gets all method names, close codes, and reconnect policy for free. It never needs to redeclare them.
 
@@ -74,19 +74,21 @@ Network addresses and workspace port allocation.
 | `DEFAULT_GATEWAY_HOST` | `"0.0.0.0"` | Default gateway bind host |
 | `DEFAULT_LOCALHOST` | `"127.0.0.1"` | Loopback bind address for local services |
 | `PORT_RANGE_START` | `18080` | Base port for workspace slot allocation |
-| `PORTS_PER_SLOT` | `3` | Number of ports reserved per workspace slot |
+| `PORTS_PER_SLOT` | `4` | Number of ports reserved per workspace slot |
 | `PORT_OFFSET_HTTP` | `0` | HTTP server offset within a slot |
 | `PORT_OFFSET_PLUGIN` | `1` | Plugin WebSocket server offset within a slot |
 | `PORT_OFFSET_GATEWAY` | `2` | Gateway offset within a slot |
+| `PORT_OFFSET_ADMIN` | `3` | Admin UI offset within a slot |
 
 Workspace port formula:
 
 ```
 http_port   = PORT_RANGE_START + slot * PORTS_PER_SLOT + PORT_OFFSET_HTTP
 plugin_port = PORT_RANGE_START + slot * PORTS_PER_SLOT + PORT_OFFSET_PLUGIN
+admin_port  = PORT_RANGE_START + slot * PORTS_PER_SLOT + PORT_OFFSET_ADMIN
 ```
 
-Example for slot 0: `http=18080`, `plugin=18081`, `gateway=18082`.
+Example for slot 0: `http=18080`, `plugin=18081`, `gateway=18082`, `admin=18083`.
 
 ### `timing.py`
 
@@ -208,6 +210,7 @@ Values that belong to exactly one package's identity and are never shared.
 | `PID_FILENAME` | `"phbcli.pid"` | PID file written at startup |
 | `ENV_WORKSPACE` | `"PHB_WORKSPACE"` | Env var to override active workspace |
 | `ENV_WORKSPACE_PATH` | `"PHB_WORKSPACE_PATH"` | Env var to pass workspace path in background mode |
+|| `ENV_ADMIN_UI` | `"PHB_ADMIN_UI"` | Env var to enable admin UI in background mode |
 | `DEVICE_ID_PREFIX` | `"mobile-"` | Prefix for auto-generated device IDs |
 | `DEVICE_ID_SUFFIX_LENGTH` | `12` | Hex chars appended after the prefix |
 

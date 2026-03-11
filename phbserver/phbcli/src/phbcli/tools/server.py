@@ -38,6 +38,7 @@ from ..domain.crypto import load_or_create_master_key
 from ..domain.workspace import (
     WorkspaceError,
     WorkspaceRegistry,
+    admin_port_for,
     create_workspace,
     http_port_for,
     load_registry,
@@ -45,7 +46,7 @@ from ..domain.workspace import (
     remove_workspace,
     resolve_workspace,
 )
-from ..constants import ENV_WORKSPACE_PATH, PID_FILENAME
+from ..constants import ENV_ADMIN_UI, ENV_WORKSPACE_PATH, PID_FILENAME
 from .base import Tool, ToolParam
 
 
@@ -76,6 +77,7 @@ class StartResult:
     pid: int | None
     http_host: str
     http_port: int
+    admin_port: int | None = None
 
 
 @dataclass
@@ -129,6 +131,7 @@ def _do_start(
     console: Console,
     *,
     foreground: bool = False,
+    admin: bool = False,
 ) -> None:
     """Start the phbcli server for a workspace."""
     load_or_create_master_key(workspace_path, filename=config.master_key_file)
@@ -150,7 +153,7 @@ def _do_start(
             "[dim](Ctrl+C to stop)[/dim]"
         )
         try:
-            _asyncio.run(_main(foreground=True, workspace_path=workspace_path))
+            _asyncio.run(_main(foreground=True, workspace_path=workspace_path, admin=admin))
         except KeyboardInterrupt:
             pass
         console.print("[green]Server stopped.[/green]")
@@ -163,7 +166,10 @@ def _do_start(
             python = pythonw
 
     script = str(Path(__file__).parents[1] / "runtime" / "server_process.py")
+    # Pass admin flag via env var so the detached subprocess can read it.
     env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
+    if admin:
+        env[ENV_ADMIN_UI] = "1"
 
     if sys.platform == "win32":
         proc = subprocess.Popen(
@@ -329,6 +335,7 @@ class SetupTool(Tool):
             http_host=existing.http_host,
             http_port=effective_http_port,
             plugin_port=effective_plugin_port,
+            admin_port=admin_port_for(registry, entry.port_slot),
             master_key_file=existing.master_key_file,
             pairing_code_length=existing.pairing_code_length,
             pairing_code_ttl_seconds=existing.pairing_code_ttl_seconds,
@@ -372,12 +379,18 @@ class StartTool(Tool):
             "Run the server in the foreground with live log output",
             required=False,
         ),
+        "admin": ToolParam(
+            bool,
+            "Also start the admin UI on its dedicated port",
+            required=False,
+        ),
     }
 
     def execute(
         self,
         workspace: str | None = None,
         foreground: bool = False,
+        admin: bool = False,
     ) -> StartResult:
         entry, registry, workspace_path = _resolve_or_create(workspace)
 
@@ -398,9 +411,10 @@ class StartTool(Tool):
                 pid=pid,
                 http_host=config.http_host,
                 http_port=config.http_port,
+                admin_port=config.admin_port if admin else None,
             )
 
-        _do_start(workspace_path, config, _NullConsole(), foreground=foreground)
+        _do_start(workspace_path, config, _NullConsole(), foreground=foreground, admin=admin)
 
         new_pid = read_pid(workspace_path, PID_FILENAME)
         return StartResult(
@@ -410,6 +424,7 @@ class StartTool(Tool):
             pid=new_pid,
             http_host=config.http_host,
             http_port=config.http_port,
+            admin_port=config.admin_port if admin else None,
         )
 
 

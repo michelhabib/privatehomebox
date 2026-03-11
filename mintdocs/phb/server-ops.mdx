@@ -20,6 +20,7 @@ Starts the workspace server in background mode by default.
 |--------|-------------|
 | `--workspace`, `-W` | Target workspace name. |
 | `--foreground`, `-f` | Run in foreground with live logs. Use `Ctrl+C` to stop. |
+| `--admin` | Also start the admin UI on its dedicated port (localhost only). |
 
 ### Examples
 
@@ -29,6 +30,12 @@ phbcli start --workspace home
 
 # Start in foreground for troubleshooting
 phbcli start --workspace home --foreground
+
+# Start with the admin UI
+phbcli start --workspace home --admin
+
+# Start in foreground with the admin UI
+phbcli start --workspace home --foreground --admin
 ```
 
 ## Stop

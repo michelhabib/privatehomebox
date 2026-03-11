@@ -34,6 +34,7 @@ dependencies = [
     "platformdirs>=4",
     "aiosqlite>=0.20",
     "sqlmodel>=0.0.21",
+    "nicegui>=3.0",
     "phb-channel-sdk",
     "phb-commons",
 ]

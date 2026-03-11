@@ -34,6 +34,7 @@ from phb_commons.constants.domain import (
 from phb_commons.constants.network import (
     DEFAULT_GATEWAY_PORT,
     DEFAULT_LOCALHOST,
+    PORT_OFFSET_ADMIN,
     PORT_OFFSET_HTTP,
     PORT_OFFSET_PLUGIN,
     PORT_RANGE_START,
@@ -47,6 +48,7 @@ class Config(BaseModel):
     http_host: str = DEFAULT_LOCALHOST
     http_port: int = PORT_RANGE_START + PORT_OFFSET_HTTP
     plugin_port: int = PORT_RANGE_START + PORT_OFFSET_PLUGIN
+    admin_port: int = PORT_RANGE_START + PORT_OFFSET_ADMIN
     master_key_file: str = MASTER_KEY_FILENAME
     pairing_code_length: int = DEFAULT_PAIRING_CODE_LENGTH
     pairing_code_ttl_seconds: int = DEFAULT_PAIRING_CODE_TTL_SECONDS

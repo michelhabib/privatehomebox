@@ -24,7 +24,7 @@ from pathlib import Path
 from phb_commons.log import Logger
 from phb_commons.process import write_pid
 
-from phbcli.constants import DEVICE_ID_PREFIX, DEVICE_ID_SUFFIX_LENGTH, ENV_WORKSPACE_PATH, PID_FILENAME
+from phbcli.constants import DEVICE_ID_PREFIX, DEVICE_ID_SUFFIX_LENGTH, ENV_ADMIN_UI, ENV_WORKSPACE_PATH, PID_FILENAME
 
 log = Logger.get("SERVER")
 
@@ -54,7 +54,7 @@ async def _tail_plugin_logs(log_dir: Path, stop_event: asyncio.Event) -> None:
                 pass
 
 
-async def _main(foreground: bool = False, workspace_path: Path | None = None) -> None:
+async def _main(foreground: bool = False, workspace_path: Path | None = None, admin: bool = False) -> None:
     if workspace_path is None:
         ws_str = os.environ.get(ENV_WORKSPACE_PATH)
         if not ws_str:
@@ -223,6 +223,9 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
     ]
     if foreground:
         coros.append(_tail_plugin_logs(log_dir, stop_event))
+    if admin:
+        from phbcli.ui.run import run_admin_ui
+        coros.append(run_admin_ui(config, stop_event))
 
     server_task = asyncio.ensure_future(
         asyncio.gather(*coros, return_exceptions=True)
@@ -241,4 +244,6 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None) ->
 
 
 if __name__ == "__main__":
-    asyncio.run(_main())
+    # Read admin flag from env var set by tools/server.py for background spawns.
+    _admin = os.environ.get(ENV_ADMIN_UI) == "1"
+    asyncio.run(_main(admin=_admin))

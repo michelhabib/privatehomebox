@@ -8,14 +8,15 @@ Registry location (per platform):
 Each workspace is a self-contained directory holding config, keys, channels,
 logs, and PID files.
 
-Port allocation — 3 ports per slot, starting at port_range_start (default 18080):
-  http_port    = port_range_start + slot * 3
-  plugin_port  = port_range_start + slot * 3 + 1
-  gateway_port = port_range_start + slot * 3 + 2
+Port allocation — 4 ports per slot, starting at port_range_start (default 18080):
+  http_port    = port_range_start + slot * 4
+  plugin_port  = port_range_start + slot * 4 + 1
+  gateway_port = port_range_start + slot * 4 + 2
+  admin_port   = port_range_start + slot * 4 + 3
 
 Example (default port_range_start=18080):
-  slot 0 → http=18080, plugin=18081, gateway=18082
-  slot 1 → http=18083, plugin=18084, gateway=18085
+  slot 0 → http=18080, plugin=18081, gateway=18082, admin=18083
+  slot 1 → http=18084, plugin=18085, gateway=18086, admin=18087
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ from platformdirs import user_data_dir
 from pydantic import BaseModel
 
 from phb_commons.constants.domain import DEFAULT_WORKSPACE_NAME
-from phb_commons.constants.network import PORT_RANGE_START, PORTS_PER_SLOT
+from phb_commons.constants.network import PORT_OFFSET_ADMIN, PORT_RANGE_START, PORTS_PER_SLOT
 from phb_commons.constants.storage import REGISTRY_FILENAME
 
 from ..constants import APP_NAME, ENV_WORKSPACE
@@ -80,6 +81,10 @@ def plugin_port_for(registry: WorkspaceRegistry, slot: int) -> int:
 
 def gateway_port_for(registry: WorkspaceRegistry, slot: int) -> int:
     return registry.port_range_start + slot * PORTS_PER_SLOT + 2
+
+
+def admin_port_for(registry: WorkspaceRegistry, slot: int) -> int:
+    return registry.port_range_start + slot * PORTS_PER_SLOT + PORT_OFFSET_ADMIN
 
 
 def next_free_slot(registry: WorkspaceRegistry) -> int:

@@ -120,10 +120,14 @@ def register(app: typer.Typer, console: Console) -> None:
                 "Press Ctrl+C to stop."
             ),
         ),
+        admin: bool = typer.Option(
+            False, "--admin",
+            help="Also start the admin UI on its dedicated port (localhost only).",
+        ),
     ) -> None:
         """Start the phbcli server (background by default, foreground with -f)."""
         try:
-            result = StartTool().execute(workspace=workspace, foreground=foreground)
+            result = StartTool().execute(workspace=workspace, foreground=foreground, admin=admin)
         except ValueError as exc:
             console.print(f"[red]{exc}[/red]")
             raise typer.Exit(1)
@@ -138,6 +142,10 @@ def register(app: typer.Typer, console: Console) -> None:
                 f"[green]Server started[/green] (PID {result.pid}). "
                 f"HTTP: http://{result.http_host}:{result.http_port}/status"
             )
+            if result.admin_port:
+                console.print(
+                    f"  Admin UI: [cyan]http://127.0.0.1:{result.admin_port}[/cyan]"
+                )
 
     @app.command()
     def stop(

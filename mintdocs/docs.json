@@ -61,7 +61,8 @@
               "architecture/constants",
               "architecture/tools-architecture",
               "architecture/device-auth",
-              "architecture/workspace-data-store"
+              "architecture/workspace-data-store",
+              "architecture/admin-ui"
             ]
           },
           {
