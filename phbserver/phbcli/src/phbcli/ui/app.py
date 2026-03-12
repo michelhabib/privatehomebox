@@ -26,6 +26,7 @@ _NAV: list[tuple[str | None, str, str | None, str | None]] = [
     ("Server", "Dashboard", "dashboard", "/"),
     ("Server", "Workspaces", "storage", "/workspaces"),
     ("Server", "Channels", "cable", "/channels"),
+    ("Server", "Gateways", "router", "/gateways"),
     ("Server", "Agents", "smart_toy", "/agents"),
     (None, "Nodes / Devices", None, None),
     ("Nodes / Devices", "Devices", "devices", "/devices"),
@@ -162,6 +163,7 @@ def register_pages() -> None:
     from phbcli.ui.pages import workspaces as _workspaces  # noqa: F401 — side-effect import
     from phbcli.ui.pages import channels as _channels  # noqa: F401 — side-effect import
     from phbcli.ui.pages import devices as _devices  # noqa: F401 — side-effect import
+    from phbcli.ui.pages import gateways as _gateways  # noqa: F401 — side-effect import
     from phbcli.ui.pages import agents as _agents  # noqa: F401 — side-effect import
     from phbcli.ui.pages import logs as _logs  # noqa: F401 — side-effect import
 

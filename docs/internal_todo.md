@@ -21,13 +21,9 @@
 - Refactor CLI UI to be more consistent and easier to use.
 
 # Admin UI
-- Figuring out Missing parts and initial arrangement
+- Admin UI - Figuring out Missing parts and initial arrangement
 - cleaning up orphaned channel processes, what is the best approach?
-- Logs should be a Tool, Log should have colors.
-- Workspace should be a Global Dropdown
-- Allow Loading Local Gateways
-- Allow Reloading Workspace.
-- Add Device QR Code
+- Admin UI - Logs should be a Tool, Log should have colors.
 - Fine Tune Tools for better utilization
 - Work on Admin UI Security
 - Show Scheduled Tasks schtasks
@@ -35,6 +31,9 @@
 - workspace remove doesnt check if auto start is removed first (teardown) - so some services will stay orphaned.
 - clicking long actions in admin ui should show a progress bar. like start, delete workspaces, etc...
 - show a message back online when restarting admin ui.
+- when adding a workspace in admin ui, show public key ONCE.
+- calling http on gateway ws causes an error in gateway code in terminal.
+- allow gateway to edit instance name like workspace.
 
 # Refactoring
 - Gateway
@@ -126,6 +125,12 @@
 - Describe progressive Architecture in MintDocs, add Diagrams.
 - Add Home Page
 - Create Flutter Android App
+- Admin UI - Workspace should be a Global Dropdown
+- Admin UI - Allow Reloading Workspace.
+- Admin UI - Add Device QR Code
+- Admin UI - Allow Loading Local Gateways
+
+
 
 # UI Design Ideas
 

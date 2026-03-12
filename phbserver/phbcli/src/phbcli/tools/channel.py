@@ -14,10 +14,11 @@ from typing import Any
 
 from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
 
+from phb_commons.process import find_workspace_root
+
 from ..domain.channel_config import (
     ChannelConfig,
     delete_channel_config,
-    find_workspace_root,
     list_channel_configs,
     load_channel_config,
     save_channel_config,

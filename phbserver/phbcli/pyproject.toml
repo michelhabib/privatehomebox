@@ -39,6 +39,7 @@ dependencies = [
     "phb-channel-sdk",
     "phb-commons",
     "phb-channel-devices",
+    "phbgateway",
 ]
 
 [project.scripts]
@@ -49,6 +50,7 @@ phb-channel-devices = "phb_channel_devices.main:app"
 phb-channel-sdk = { workspace = true }
 phb-commons = { workspace = true }
 phb-channel-devices = { workspace = true }
+phbgateway = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/phbcli"]

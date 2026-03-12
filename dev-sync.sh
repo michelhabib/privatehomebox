@@ -8,6 +8,10 @@ set -e
 echo "==> Stopping phbcli server (if running)..."
 phbcli stop 2>/dev/null || true
 
+echo "==> Stopping phb-channel-devices (if running)..."
+# Git Bash/MSYS can rewrite /F-style args unless conversion is disabled.
+MSYS2_ARG_CONV_EXCL='*' taskkill.exe /F /T /IM phb-channel-devices.exe 2>/dev/null || true
+
 echo "==> Syncing phbserver workspace dependencies..."
 cd phbserver
 uv sync

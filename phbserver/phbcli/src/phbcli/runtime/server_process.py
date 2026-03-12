@@ -16,7 +16,6 @@ import asyncio
 import json
 import os
 import signal
-import subprocess
 import sys
 import uuid
 from datetime import UTC, datetime
@@ -254,12 +253,12 @@ async def _main(foreground: bool = False, workspace_path: Path | None = None, ad
 
 
 def _spawn_server(workspace_path: Path, admin: bool = False) -> None:
-    """Spawn a new detached server process (used for self-restart)."""
-    python = sys.executable
-    if sys.platform == "win32" and python.lower().endswith("python.exe"):
-        pythonw = str(Path(python).with_name("pythonw.exe"))
-        if Path(pythonw).exists():
-            python = pythonw
+    """Spawn a new detached server process (used for self-restart).
+
+    Uses spawn_detached from phb_commons; the new child writes its own PID
+    via write_pid() at startup, so we don't write it here.
+    """
+    from phb_commons.process import remove_pid, spawn_detached, uv_python_cmd
 
     script = str(Path(__file__))
     env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
@@ -268,31 +267,12 @@ def _spawn_server(workspace_path: Path, admin: bool = False) -> None:
     elif ENV_ADMIN_UI in env:
         del env[ENV_ADMIN_UI]
 
-    if sys.platform == "win32":
-        proc = subprocess.Popen(
-            [python, script],
-            env=env,
-            creationflags=(
-                subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-                | subprocess.CREATE_NO_WINDOW
-            ),
-            close_fds=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    else:
-        proc = subprocess.Popen(
-            [python, script],
-            env=env,
-            start_new_session=True,
-            close_fds=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    # Clear stale PID so the new child starts clean.
+    remove_pid(workspace_path, PID_FILENAME)
 
-    write_pid(workspace_path, PID_FILENAME, proc.pid)
-    log.info("New server process spawned", pid=proc.pid)
+    stderr_log = workspace_path / "stderr.log"
+    spawn_detached([*uv_python_cmd(), script], env=env, stderr_log=stderr_log)
+    log.info("New server process spawning (child will write its own PID)")
 
 
 if __name__ == "__main__":

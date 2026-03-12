@@ -12,6 +12,7 @@ from phb_commons.constants.storage import CONFIG_FILENAME, LOGS_DIR
 class GatewayConfig(BaseModel):
     desktop_public_key: str
     log_dir: str = ""
+    autostart_method: str = "skipped"
 
 
 def instance_config_file(instance_path: Path) -> Path:

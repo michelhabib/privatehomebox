@@ -10,10 +10,11 @@ import json
 import logging
 import sqlite3
 import sys
-import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from phb_commons.process import find_workspace_root
 
 from .db import db_path, ensure_db
 
@@ -55,25 +56,6 @@ class ChannelConfig:
         if sys.platform != "win32":
             return False
         return base == [f"phb-channel-{self.name}"]
-
-
-def find_workspace_root(start: Path | None = None) -> Path | None:
-    """Walk up from *start* (defaults to CWD) looking for a uv workspace root.
-
-    A workspace root is a directory containing a ``pyproject.toml`` with a
-    ``[tool.uv.workspace]`` section.
-    """
-    current = (start or Path.cwd()).resolve()
-    for candidate_dir in [current, *current.parents]:
-        toml_path = candidate_dir / "pyproject.toml"
-        if toml_path.exists():
-            try:
-                data = tomllib.loads(toml_path.read_text(encoding="utf-8"))
-                if "workspace" in data.get("tool", {}).get("uv", {}):
-                    return candidate_dir
-            except Exception:
-                pass
-    return None
 
 
 # ---------------------------------------------------------------------------

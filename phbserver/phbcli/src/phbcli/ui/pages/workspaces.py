@@ -171,56 +171,113 @@ async def workspaces_page() -> None:
             ui.button("Restart", on_click=do_restart).props('color="warning"')
 
     # ------------------------------------------------------------------ setup dialog
-    with ui.dialog() as setup_dialog, ui.card().classes("w-[520px]"):
-        setup_title = ui.label("").classes("text-lg font-semibold mb-1")
-        setup_path_info = ui.label("").classes("text-xs opacity-50 mb-3")
+    # persistent=True prevents accidental dismissal by clicking outside the dialog.
+    # The card has two panels: the form (setup_form_panel) and the post-setup public
+    # key reveal (setup_key_panel). Only one is visible at a time.
+    setup_dialog = ui.dialog().props("persistent")
 
-        setup_gateway_input = ui.input(
-            "Gateway WebSocket URL *",
-            placeholder="ws://myhost:8765",
-        ).classes("w-full")
+    with setup_dialog, ui.card().classes("w-[520px]"):
 
-        with ui.expansion("Advanced options", icon="tune").classes("w-full mt-2"):
-            setup_port_input = ui.number(
-                "HTTP port override",
-                placeholder="Leave blank to use auto-assigned port",
-                min=1024,
-                max=65535,
-                precision=0,
+        # ---- form panel ----
+        setup_form_panel = ui.column().classes("w-full gap-0")
+        with setup_form_panel:
+            setup_title = ui.label("").classes("text-lg font-semibold mb-1")
+            setup_path_info = ui.label("").classes("text-xs opacity-50 mb-3")
+
+            setup_gateway_input = ui.input(
+                "Gateway WebSocket URL *",
+                placeholder="ws://myhost:8765",
             ).classes("w-full")
-            setup_port_info = ui.label("").classes("text-xs opacity-50 mt-1 mb-2")
 
-            setup_skip_autostart = ui.checkbox(
-                "Skip auto-start registration",
-            ).classes("mt-1")
-            ui.label(
-                "By default, the server is registered to start automatically on login."
-            ).classes("text-xs opacity-50 ml-6 mb-2")
+            with ui.expansion("Advanced options", icon="tune").classes("w-full mt-2"):
+                setup_port_input = ui.number(
+                    "HTTP port override",
+                    placeholder="Leave blank to use auto-assigned port",
+                    min=1024,
+                    max=65535,
+                    precision=0,
+                ).classes("w-full")
+                setup_port_info = ui.label("").classes("text-xs opacity-50 mt-1 mb-2")
 
-            setup_start_server = ui.checkbox(
-                "Start server immediately after setup",
-            ).classes("mt-1")
-
-            # Elevated task option — only relevant on Windows (UAC prompt on server machine)
-            if sys.platform == "win32":
-                setup_elevated_task = ui.checkbox(
-                    "Request elevated Task Scheduler entry (Windows UAC)",
+                setup_skip_autostart = ui.checkbox(
+                    "Skip auto-start registration",
                 ).classes("mt-1")
                 ui.label(
-                    "Triggers a UAC prompt on the server machine to register the task "
-                    "with highest privileges. Only works if you have physical or RDP "
-                    "access to the server."
-                ).classes("text-xs opacity-50 ml-6 mb-1")
-            else:
-                # Non-Windows: create a dummy checkbox that is never shown/used
-                setup_elevated_task = ui.checkbox("").classes("hidden")
+                    "By default, the server is registered to start automatically on login."
+                ).classes("text-xs opacity-50 ml-6 mb-2")
+
+                setup_start_server = ui.checkbox(
+                    "Start server immediately after setup",
+                ).classes("mt-1")
+
+                # Elevated task option — only relevant on Windows (UAC prompt on server machine)
+                if sys.platform == "win32":
+                    setup_elevated_task = ui.checkbox(
+                        "Request elevated Task Scheduler entry (Windows UAC)",
+                    ).classes("mt-1")
+                    ui.label(
+                        "Triggers a UAC prompt on the server machine to register the task "
+                        "with highest privileges. Only works if you have physical or RDP "
+                        "access to the server."
+                    ).classes("text-xs opacity-50 ml-6 mb-1")
+                else:
+                    # Non-Windows: create a dummy checkbox that is never shown/used
+                    setup_elevated_task = ui.checkbox("").classes("hidden")
+
+        # ---- key reveal panel (hidden until setup succeeds) ----
+        setup_key_panel = ui.column().classes("w-full gap-3")
+        with setup_key_panel:
+            with ui.row().classes("items-center gap-2"):
+                ui.icon("check_circle").classes("text-positive text-2xl")
+                setup_key_ws_label = ui.label("").classes("text-lg font-semibold")
+
+            with ui.card().classes("w-full bg-amber-50 dark:bg-amber-900/30 border border-amber-400"):
+                with ui.row().classes("items-start gap-2 p-1"):
+                    ui.icon("warning").classes("text-amber-500 text-xl mt-0.5 shrink-0")
+                    ui.label(
+                        "Save this public key — it will not be shown again. "
+                        "You must paste it into the Desktop public key field "
+                        "when creating a gateway instance for this workspace."
+                    ).classes("text-sm text-amber-800 dark:text-amber-200")
+
+            ui.label("Workspace public key (Ed25519, base64):").classes(
+                "text-xs font-semibold opacity-70 mt-1"
+            )
+            with ui.row().classes("w-full items-start gap-2"):
+                setup_pubkey_display = ui.textarea().classes("w-full font-mono text-xs").props(
+                    "readonly rows=3 outlined"
+                )
+
+                async def _copy_pubkey() -> None:
+                    await ui.clipboard.write(setup_pubkey_display.value)
+                    ui.notify("Public key copied to clipboard.", color="positive", timeout=2500)
+
+                ui.button(icon="content_copy", on_click=_copy_pubkey).props(
+                    "flat dense"
+                ).classes("mt-1 shrink-0").tooltip("Copy to clipboard")
+
+        setup_key_panel.set_visibility(False)
+
+        # ---- form action buttons (rendered after both panels so they sit below) ----
+        with setup_form_panel:
+            with ui.row().classes("justify-end gap-2 w-full mt-4"):
+                ui.button("Cancel", on_click=setup_dialog.close).props("flat")
+                setup_run_btn = ui.button("Run setup", icon="settings")
+
+        # ---- key panel dismiss button ----
+        with setup_key_panel:
+            with ui.row().classes("justify-end w-full mt-2"):
+                ui.button(
+                    "I've saved the key — close",
+                    icon="lock",
+                    on_click=lambda: _dismiss_setup_key_panel(),
+                ).props('color="primary"')
 
         async def do_setup() -> None:
             from phbcli.tools.server import SetupTool
 
             row = pending_setup[0]
             ws_id = row.get("id", "")
-            ws_name = row.get("name", "")
 
             gateway = setup_gateway_input.value.strip()
             if not gateway:
@@ -239,24 +296,30 @@ async def workspaces_page() -> None:
                     start_server=setup_start_server.value,
                     elevated_task=setup_elevated_task.value,
                 )
-                msg_parts = [f"Gateway: {result.gateway_url}", f"HTTP port: {result.http_port}"]
-                if result.autostart_registered:
-                    msg_parts.append(f"Autostart: {result.autostart_method}")
-                if result.server_started:
-                    msg_parts.append("Server started")
-                ui.notify(
-                    f"Workspace '{ws_name}' configured. " + "  •  ".join(msg_parts),
-                    color="positive",
-                    timeout=8000,
-                )
-                setup_dialog.close()
+                # Swap to key reveal panel — form is hidden until dialog is reopened
+                setup_key_ws_label.set_text(f"Workspace '{result.workspace}' configured")
+                setup_pubkey_display.set_value(result.desktop_pub)
+                setup_form_panel.set_visibility(False)
+                setup_key_panel.set_visibility(True)
                 workspace_list.refresh()
             except Exception as exc:
                 ui.notify(str(exc), color="negative")
 
-        with ui.row().classes("justify-end gap-2 w-full mt-4"):
-            ui.button("Cancel", on_click=setup_dialog.close).props("flat")
-            ui.button("Run setup", icon="settings", on_click=do_setup)
+        setup_run_btn.on("click", do_setup)
+
+        def _dismiss_setup_key_panel() -> None:
+            setup_key_panel.set_visibility(False)
+            setup_form_panel.set_visibility(True)
+            _reset_setup_form()
+            setup_dialog.close()
+
+        def _reset_setup_form() -> None:
+            setup_gateway_input.set_value("")
+            setup_port_input.set_value(None)
+            setup_skip_autostart.set_value(False)
+            setup_start_server.set_value(False)
+            setup_elevated_task.set_value(False)
+            setup_pubkey_display.set_value("")
 
     # ------------------------------------------------------------------ refreshable table
     @ui.refreshable
@@ -563,6 +626,9 @@ async def workspaces_page() -> None:
             setup_skip_autostart.set_value(False)
             setup_start_server.set_value(False)
             setup_elevated_task.set_value(False)
+            # Always open on the form panel (guard against stale state)
+            setup_key_panel.set_visibility(False)
+            setup_form_panel.set_visibility(True)
             setup_dialog.open()
 
         def handle_open_folder(e) -> None:

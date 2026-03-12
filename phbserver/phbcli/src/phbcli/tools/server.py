@@ -9,14 +9,22 @@ from __future__ import annotations
 
 import os
 import shutil
-import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
 from phb_commons.keys import public_key_to_b64
-from phb_commons.process import is_running, read_pid, remove_pid, stop_process, write_pid
+from phb_commons.process import (
+    find_workspace_root,
+    is_running,
+    read_pid,
+    remove_pid,
+    spawn_detached,
+    stop_process,
+    uv_python_cmd,
+    wait_for_pid,
+)
 from phb_commons.constants.domain import MANDATORY_CHANNEL_NAME
 from phb_commons.constants.timing import DEFAULT_PING_INTERVAL_SECONDS
 from rich.console import Console
@@ -29,7 +37,6 @@ from ..autostart import (
 )
 from ..domain.channel_config import (
     ChannelConfig,
-    find_workspace_root,
     load_channel_config,
     save_channel_config,
 )
@@ -172,43 +179,21 @@ def _do_start(
         console.print("[green]Server stopped.[/green]")
         return
 
-    python = sys.executable
-    if sys.platform == "win32" and python.lower().endswith("python.exe"):
-        pythonw = str(Path(python).with_name("pythonw.exe"))
-        if Path(pythonw).exists():
-            python = pythonw
+    # Clear stale PID so wait_for_pid starts from a clean slate.
+    remove_pid(workspace_path, PID_FILENAME)
 
     script = str(Path(__file__).parents[1] / "runtime" / "server_process.py")
     env = {**os.environ, ENV_WORKSPACE_PATH: str(workspace_path)}
     if admin:
         env[ENV_ADMIN_UI] = "1"
 
-    if sys.platform == "win32":
-        proc = subprocess.Popen(
-            [python, script],
-            env=env,
-            creationflags=(
-                subprocess.DETACHED_PROCESS
-                | subprocess.CREATE_NEW_PROCESS_GROUP
-                | subprocess.CREATE_NO_WINDOW
-            ),
-            close_fds=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-    else:
-        proc = subprocess.Popen(
-            [python, script],
-            env=env,
-            start_new_session=True,
-            close_fds=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    stderr_log = workspace_path / "stderr.log"
+    spawn_detached([*uv_python_cmd(), script], env=env, stderr_log=stderr_log)
 
-    write_pid(workspace_path, PID_FILENAME, proc.pid)
+    # Wait for the child to write its own PID and confirm it is alive.
+    child_pid = wait_for_pid(workspace_path, PID_FILENAME)
     console.print(
-        f"[green]Server started[/green] (PID {proc.pid}). "
+        f"[green]Server started[/green] (PID {child_pid}). "
         f"HTTP: http://{config.http_host}:{config.http_port}/status"
     )
 

@@ -8,6 +8,13 @@ from .channel import (
     ChannelSetupTool,
 )
 from .device import DeviceAddTool, DeviceListTool, DeviceRevokeTool
+from .gateway import (
+    GatewaySetupTool,
+    GatewayStartTool,
+    GatewayStatusTool,
+    GatewayStopTool,
+    GatewayTeardownTool,
+)
 from .server import (
     RestartTool,
     SetupTool,
@@ -50,4 +57,9 @@ def all_tools() -> list[Tool]:
         StatusTool(),
         TeardownTool(),
         UninstallTool(),
+        GatewayStatusTool(),
+        GatewayStartTool(),
+        GatewayStopTool(),
+        GatewaySetupTool(),
+        GatewayTeardownTool(),
     ]
