@@ -286,15 +286,17 @@ Use these verbatim in prompts when working with an AI coding assistant:
 
 Issues discovered during the Riverpod v2 → v3 / freezed v2 → v3 upgrade.
 
-### `source_gen` conflict between `riverpod_generator` and `freezed`
+<AccordionGroup>
+
+<Accordion title="version solving failed: source_gen conflict between riverpod_generator and freezed">
 
 `riverpod_generator ^4` requires `source_gen ^3`, but `freezed ^2` requires `source_gen ^2`. They cannot coexist.
 
 **Fix:** upgrade `freezed` and `freezed_annotation` to `^3.x` at the same time as `riverpod_generator ^4.x`.
 
----
+</Accordion>
 
-### `analyzer` conflict between `riverpod_generator ^4` and `drift_dev ^2.32+`
+<Accordion title="version solving failed: analyzer conflict between riverpod_generator ^4 and drift_dev ^2.32+">
 
 `riverpod_generator ^4` requires `analyzer ^9`, but `drift_dev >=2.32.0` bumped to `analyzer ^10`.
 
@@ -305,11 +307,11 @@ drift: ">=2.28.1 <2.32.0"
 drift_dev: ">=2.28.1 <2.32.0"
 ```
 
----
+</Accordion>
 
-### `flutter pub get` uses global Flutter instead of FVM version
+<Accordion title="flutter pub get reports false SDK incompatibilities (e.g. flex_color_scheme requires Flutter >=3.38.0)">
 
-Running `flutter pub get` (without `fvm`) resolves against the globally installed Flutter SDK, which may be an older version. This causes false package incompatibility errors (e.g. `flex_color_scheme ^8.4.0 requires Flutter >=3.38.0`).
+Running `flutter pub get` (without `fvm`) resolves against the globally installed Flutter SDK, which may be an older version. This produces false incompatibility errors even when the FVM-pinned version satisfies the constraint.
 
 **Fix:** always prefix Flutter commands with `fvm`:
 
@@ -319,9 +321,9 @@ fvm flutter pub upgrade
 fvm flutter pub run build_runner build --delete-conflicting-outputs
 ```
 
----
+</Accordion>
 
-### Riverpod v3: provider names no longer include "Notifier"
+<Accordion title="Riverpod v3: undefined_identifier errors for authNotifierProvider, gatewayNotifierProvider, etc.">
 
 In Riverpod v3 / `riverpod_generator ^4`, class-based providers drop the `Notifier` suffix from their generated variable name.
 
@@ -334,11 +336,11 @@ In Riverpod v3 / `riverpod_generator ^4`, class-based providers drop the `Notifi
 
 Function-based providers (lowercase function names) are **unchanged**.
 
-**Fix:** global search-and-replace across the codebase for each renamed provider.
+**Fix:** global search-and-replace across the codebase for each renamed provider after running `build_runner`.
 
----
+</Accordion>
 
-### Riverpod v3: `AsyncValue.valueOrNull` renamed to `.value`
+<Accordion title="Riverpod v3: 'valueOrNull' isn't defined for the type 'AsyncValue'">
 
 The old `AsyncValue.value` (which threw on error/loading) was removed. `valueOrNull` was renamed to `value`.
 
@@ -350,11 +352,11 @@ final state = ref.watch(authProvider).valueOrNull;
 final state = ref.watch(authProvider).value;
 ```
 
-**Fix:** global search-and-replace `valueOrNull` → `value` for all Riverpod `AsyncValue` usages. Do **not** rename `valueOrNull` on custom non-Riverpod types (e.g. a `Result<T>` class with its own `valueOrNull` getter).
+**Fix:** global search-and-replace `.valueOrNull` → `.value` for all Riverpod `AsyncValue` usages. Do **not** rename `valueOrNull` on custom non-Riverpod types (e.g. a `Result<T>` class with its own `valueOrNull` getter).
 
----
+</Accordion>
 
-### Freezed v3: single-variant data classes must be `abstract class`
+<Accordion title="Freezed v3: non_abstract_class_inherits_abstract_member on @freezed data classes">
 
 In freezed v3, the generated `_$Foo` mixin declares abstract field getters. A plain `class Foo with _$Foo` is a concrete class with unimplemented abstract members — this is a compile error.
 
@@ -376,33 +378,33 @@ abstract class Channel with _$Channel {
 
 **Not affected:** multi-variant union types (e.g. `AuthState` with `unauthenticated / pairing / authenticated / error`) — the mixin for unions has no abstract field getters, so `class` continues to work.
 
----
+</Accordion>
 
-### Freezed v3: `when()` / `map()` are now extension methods
+<Accordion title="Freezed v3: 'when' / 'map' isn't defined for the type after upgrading">
 
 In freezed v3, pattern-matching methods (`when`, `map`, `maybeWhen`, etc.) were moved from instance methods on the class to an extension (e.g. `extension AuthStatePatterns on AuthState`).
 
-Extension methods require a **direct import** of the library that defines them. Transitive imports (importing a file that imports the freezed file) are not sufficient.
+Extension methods require a **direct import** of the library that defines them. Importing a file that imports the freezed file is not sufficient.
 
 ```dart
-// router_notifier.dart — only imported auth_notifier.dart, not auth_state.dart
-// auth_notifier.dart uses `import`, not `export`, for auth_state.dart
-// → auth.when(...) fails: "The method 'when' isn't defined for the type 'AuthState'"
+// router_notifier.dart only imported auth_notifier.dart, not auth_state.dart directly.
+// auth_notifier.dart uses `import` (not `export`) for auth_state.dart, so the
+// AuthStatePatterns extension was not in scope.
+// Error: "The method 'when' isn't defined for the type 'AuthState'"
 
-// Fix: add a direct import
-import 'auth/auth_state.dart'; // brings AuthStatePatterns extension into scope
+// Fix: add a direct import to bring the extension into scope
+import 'auth/auth_state.dart';
 ```
 
----
+</Accordion>
 
-### Riverpod v3: auto-dispose kills providers mid-async operation
+<Accordion title="Riverpod v3 runtime: 'Cannot use the Ref after it has been disposed' mid-async operation">
 
-`@riverpod` (auto-dispose) providers can be paused or disposed between `await` points. Any `ref.read()` call **after** an `await` will throw "Cannot use the Ref after it has been disposed."
+`@riverpod` (auto-dispose) providers can be paused or disposed between `await` points. Any `ref.read()` call **after** an `await` will throw this error at runtime.
 
 Two rules to follow:
 
-1. **Action/service notifiers that span async work must be `keepAlive: true`.**
-   `MessageSendNotifier`, `GatewayNotifier`, `RouterNotifier` are examples — they are not tied to a single widget's lifecycle.
+1. **Action/service notifiers that span async work must be `keepAlive: true`.** `MessageSendNotifier`, `GatewayNotifier`, and `RouterNotifier` are examples — they are not tied to a single widget's lifecycle.
 
 2. **Capture all `ref.read()` results before the first `await`.**
 
@@ -423,10 +425,14 @@ Future<void> sendText(...) async {
 }
 ```
 
----
+</Accordion>
 
-### Redundant `flutter_riverpod` imports
+<Accordion title="Riverpod v3: unnecessary_import warning for flutter_riverpod">
 
-In Riverpod v3, `package:riverpod_annotation/riverpod_annotation.dart` re-exports everything from `flutter_riverpod`. Files that import both will get an `unnecessary_import` warning.
+In Riverpod v3, `package:riverpod_annotation/riverpod_annotation.dart` re-exports everything from `flutter_riverpod`. Files that import both will get an `unnecessary_import` lint warning.
 
 **Fix:** remove `import 'package:flutter_riverpod/flutter_riverpod.dart'` from any file that already imports `riverpod_annotation`.
+
+</Accordion>
+
+</AccordionGroup>
